@@ -1,0 +1,6 @@
+.build/
+.build-foldie/
+Foldie.app/
+*.zip
+.DS_Store
+*.xcuserstate
