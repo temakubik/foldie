@@ -385,8 +385,8 @@ struct CylinderMenuView: View {
         removeEventMonitors()
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            // Horizontal swipe switches active folder cleanly
-            if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+            // Horizontal swipe (trackpad, horizontal mouse wheel, or Shift+wheel) switches active folder cleanly
+            if store.hider.effectiveHorizontalScrollDelta(for: event) != nil {
                 store.hider.processHorizontalScrollEvent(event)
                 return nil
             }

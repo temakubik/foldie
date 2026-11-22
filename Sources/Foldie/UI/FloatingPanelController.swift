@@ -13,8 +13,12 @@ final class FloatingPanelController: NSObject {
     private var globalMouseMovedMonitor: Any?
     private var globalScrollMonitor: Any?
     private var localScrollMonitor: Any?
+    private var localDragMonitor: Any?
     private var localMouseMovedMonitor: Any?
     private var localKeyMonitor: Any?
+
+    private var capsuleDragStartX: CGFloat?
+    private var capsuleDragSwiped: Bool = false
 
     private var hoverOpenTask: Task<Void, Never>?
     private var hoverCloseTask: Task<Void, Never>?
@@ -165,13 +169,53 @@ final class FloatingPanelController: NSObject {
         }
         localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self else { return event }
-            if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15,
+            if self.store.hider.effectiveHorizontalScrollDelta(for: event) != nil,
                self.isPointerInSwipeArea(mouse: NSEvent.mouseLocation) {
                 self.store.hider.processHorizontalScrollEvent(event)
                 return nil
             }
             return event
         }
+        // Mouse click-and-drag horizontally across Foldie's capsule switches main folders (⌘+drag still moves the icon in macOS)
+        localDragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            guard let self else { return event }
+            guard self.store.config.preferences.enableMenuBarSwipe else { return event }
+            let mouse = NSEvent.mouseLocation
+            switch event.type {
+            case .leftMouseDown:
+                if !event.modifierFlags.contains(.command), self.isPointerOverMainCapsule(mouse: mouse) {
+                    self.capsuleDragStartX = mouse.x
+                    self.capsuleDragSwiped = false
+                } else {
+                    self.capsuleDragStartX = nil
+                    self.capsuleDragSwiped = false
+                }
+            case .leftMouseDragged:
+                if let startX = self.capsuleDragStartX {
+                    let dx = mouse.x - startX
+                    if abs(dx) >= 22 {
+                        self.store.hider.triggerHorizontalSwipe(step: dx > 0 ? 1 : -1)
+                        self.capsuleDragStartX = mouse.x
+                        self.capsuleDragSwiped = true
+                        self.store.hider.suppressNextLeftClick = true
+                    }
+                }
+            case .leftMouseUp:
+                self.capsuleDragStartX = nil
+                self.capsuleDragSwiped = false
+            default:
+                break
+            }
+            return event
+        }
+    }
+
+    private func isPointerOverMainCapsule(mouse: NSPoint) -> Bool {
+        if isPointerOverStatusButton { return true }
+        if let rect = store.hider.folderButtonScreenFrame, rect.insetBy(dx: -4, dy: -4).contains(mouse) {
+            return true
+        }
+        return false
     }
 
     private func isPointerInSwipeArea(mouse: NSPoint) -> Bool {
@@ -192,7 +236,7 @@ final class FloatingPanelController: NSObject {
     }
 
     private func handlePotentialHorizontalSwipe(_ event: NSEvent) {
-        guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15 else { return }
+        guard store.hider.effectiveHorizontalScrollDelta(for: event) != nil else { return }
         if isPointerInSwipeArea(mouse: NSEvent.mouseLocation) {
             store.hider.processHorizontalScrollEvent(event)
         }

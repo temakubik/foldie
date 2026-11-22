@@ -108,6 +108,7 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     private var horizontalSwipeAccumulator: CGFloat = 0
     private var lastHorizontalSwipeTime: Date = .distantPast
     private var lastKnownFolderScreenFrame: CGRect?
+    var suppressNextLeftClick: Bool = false
 
     private var folderStatusItem: NSStatusItem? {
         folderIsSlotA ? slotA : slotB
@@ -243,11 +244,23 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         }
     }
 
+    /// Returns the effective horizontal scroll delta from a trackpad swipe, horizontal mouse wheel,
+    /// or regular mouse wheel held with Shift.
+    func effectiveHorizontalScrollDelta(for event: NSEvent) -> CGFloat? {
+        if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15 && abs(event.scrollingDeltaX) > 0.01 {
+            return event.scrollingDeltaX
+        }
+        if event.modifierFlags.contains(.shift) && abs(event.scrollingDeltaY) > 0.01 {
+            return event.scrollingDeltaY
+        }
+        return nil
+    }
+
     func processHorizontalScrollEvent(_ event: NSEvent) {
         guard isSwipeEnabled else { return }
         // Ignore inertial momentum so one two-finger flick advances exactly one folder cleanly
         guard event.momentumPhase == [] else { return }
-        guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15 else { return }
+        guard let delta = effectiveHorizontalScrollDelta(for: event) else { return }
 
         let now = Date()
         if now.timeIntervalSince(lastHorizontalSwipeTime) < 0.24 {
@@ -255,7 +268,7 @@ final class MenuBarHiderService: NSObject, ObservableObject {
             return
         }
 
-        horizontalSwipeAccumulator += event.scrollingDeltaX
+        horizontalSwipeAccumulator += delta
         let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 18.0 : 0.8
         if abs(horizontalSwipeAccumulator) >= threshold {
             let step = horizontalSwipeAccumulator < 0 ? 1 : -1
@@ -263,6 +276,15 @@ final class MenuBarHiderService: NSObject, ObservableObject {
             lastHorizontalSwipeTime = now
             onHorizontalSwipe?(step)
         }
+    }
+
+    /// Triggers a single folder step from a mouse drag across Foldie's capsule.
+    func triggerHorizontalSwipe(step: Int) {
+        guard isSwipeEnabled else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastHorizontalSwipeTime) >= 0.16 else { return }
+        lastHorizontalSwipeTime = now
+        onHorizontalSwipe?(step)
     }
 
     func setDesiredHideIcons(_ hide: Bool) {
@@ -879,6 +901,10 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     }
 
     @objc private func handleStatusButtonClick(_ sender: NSStatusBarButton) {
+        if suppressNextLeftClick {
+            suppressNextLeftClick = false
+            return
+        }
         captureAnchorFromCurrentPointer()
         guard let event = NSApp.currentEvent else {
             onLeftClick?()
