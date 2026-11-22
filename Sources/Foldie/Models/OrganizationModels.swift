@@ -51,6 +51,44 @@ enum IconStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum CapsuleShapeStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case rounded = "rounded"
+    case capsule = "capsule"
+    case subtle = "subtle"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .rounded: return "Скруглённый"
+        case .capsule: return "Капсула"
+        case .subtle: return "Строгий"
+        }
+    }
+
+    func cornerRadius(forHeight height: CGFloat) -> CGFloat {
+        switch self {
+        case .rounded: return 6.0
+        case .capsule: return height / 2.0
+        case .subtle: return 3.5
+        }
+    }
+}
+
+enum StatusBarLabelMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case iconAndText = "iconAndText"
+    case iconOnly = "iconOnly"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .iconAndText: return "Иконка и текст"
+        case .iconOnly: return "Только иконка"
+        }
+    }
+}
+
 enum AutoRehideMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case onOutsideClick = "onOutsideClick"
     case after3Seconds = "after3Seconds"
@@ -168,6 +206,10 @@ struct FoldiePreferences: Codable, Hashable, Sendable {
     var displayMode: DisplayMode = .list
     var cylinderScope: CylinderScope = .structured
     var iconStyle: IconStyle = .color
+    var capsuleShape: CapsuleShapeStyle = .rounded
+    var statusBarLabelMode: StatusBarLabelMode = .iconAndText
+    var enableMenuBarSwipe: Bool = true
+    var enableSounds: Bool = true
     var hideMenuBarIcons: Bool = true
     var showSystemItems: Bool = true
     var showOfflineItems: Bool = false
@@ -179,9 +221,10 @@ struct FoldiePreferences: Codable, Hashable, Sendable {
     var dismissedPermissionBanner: Bool = false
 
     enum CodingKeys: String, CodingKey {
-        case displayMode, cylinderScope, iconStyle, hideMenuBarIcons, showSystemItems,
-             showOfflineItems, autoRehideMode, statusIconSymbol, launchAtLogin,
-             hasCompletedOnboarding, dismissedOnboardingTip, dismissedPermissionBanner
+        case displayMode, cylinderScope, iconStyle, capsuleShape, statusBarLabelMode, enableMenuBarSwipe,
+             enableSounds, hideMenuBarIcons, showSystemItems, showOfflineItems, autoRehideMode,
+             statusIconSymbol, launchAtLogin, hasCompletedOnboarding, dismissedOnboardingTip,
+             dismissedPermissionBanner
     }
 
     init() {}
@@ -191,6 +234,10 @@ struct FoldiePreferences: Codable, Hashable, Sendable {
         displayMode = try c.decodeIfPresent(DisplayMode.self, forKey: .displayMode) ?? .list
         cylinderScope = try c.decodeIfPresent(CylinderScope.self, forKey: .cylinderScope) ?? .structured
         iconStyle = try c.decodeIfPresent(IconStyle.self, forKey: .iconStyle) ?? .color
+        capsuleShape = try c.decodeIfPresent(CapsuleShapeStyle.self, forKey: .capsuleShape) ?? .rounded
+        statusBarLabelMode = try c.decodeIfPresent(StatusBarLabelMode.self, forKey: .statusBarLabelMode) ?? .iconAndText
+        enableMenuBarSwipe = try c.decodeIfPresent(Bool.self, forKey: .enableMenuBarSwipe) ?? true
+        enableSounds = try c.decodeIfPresent(Bool.self, forKey: .enableSounds) ?? true
         hideMenuBarIcons = try c.decodeIfPresent(Bool.self, forKey: .hideMenuBarIcons) ?? true
         showSystemItems = try c.decodeIfPresent(Bool.self, forKey: .showSystemItems) ?? true
         showOfflineItems = try c.decodeIfPresent(Bool.self, forKey: .showOfflineItems) ?? false

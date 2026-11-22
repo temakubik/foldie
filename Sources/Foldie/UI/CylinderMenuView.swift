@@ -13,7 +13,7 @@ struct CylinderMenuView: View {
     @State private var keyMonitor: Any?
     @State private var snapTask: Task<Void, Never>?
 
-    private let cylinderRadius: CGFloat = 78
+    private let cylinderRadius: CGFloat = 68
     private let angleStepDegrees: Double = 22.0
     private let cardWidth: CGFloat = 194
     private let cardHeight: CGFloat = 28
@@ -27,12 +27,8 @@ struct CylinderMenuView: View {
         return min(max(Int(round(scrollOffset)), 0), nodes.count - 1)
     }
 
-    /// Dynamically anchors the drum right below the menu bar at scrollOffset == 0 (no huge blank top gap!),
-    /// then smoothly opens upper curve room as you scroll deeper into the list.
-    private var drumTopCenterY: CGFloat {
-        let progress = min(max(scrollOffset / 2.0, 0.0), 1.0)
-        return CGFloat(18.0 + progress * 74.0)
-    }
+    /// Fixed top-aligned rotation axis right beneath Foldie's menu bar capsule so scrolling NEVER drops the active item downward!
+    private let drumTopCenterY: CGFloat = 44.0
 
     var body: some View {
         VStack(spacing: 3) {
@@ -111,7 +107,7 @@ struct CylinderMenuView: View {
             ZStack {
                 ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
                     let delta = Double(index) - scrollOffset
-                    if abs(delta) <= 3.3 {
+                    if delta >= -1.45 && delta <= 3.3 {
                         cylinderCard(for: node, at: index, delta: delta, centerX: geo.size.width / 2)
                     }
                 }
@@ -359,6 +355,7 @@ struct CylinderMenuView: View {
         if index != lastDetentIndex {
             lastDetentIndex = index
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            store.sounds.playTick()
         }
     }
 

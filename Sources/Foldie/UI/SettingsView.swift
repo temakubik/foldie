@@ -66,6 +66,64 @@ struct SettingsView: View {
                         .controlSize(.small)
                         .frame(width: 190)
                     }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text("Вид в строке меню")
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { store.config.preferences.statusBarLabelMode },
+                            set: { store.setStatusBarLabelMode($0) }
+                        )) {
+                            ForEach(StatusBarLabelMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(width: 210)
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text("Форма капсулы")
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { store.config.preferences.capsuleShape },
+                            set: { store.setCapsuleShape($0) }
+                        )) {
+                            ForEach(CapsuleShapeStyle.allCases) { shape in
+                                Text(shape.title).tag(shape)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(width: 225)
+                    }
+
+                    Divider().opacity(0.4)
+
+                    Toggle("Свайп влево/вправо для переключения папок", isOn: Binding(
+                        get: { store.config.preferences.enableMenuBarSwipe },
+                        set: { store.setEnableMenuBarSwipe($0) }
+                    ))
+                    .font(.system(size: 12))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+
+                    Toggle("Звуковые эффекты (клик, свайп, барабан)", isOn: Binding(
+                        get: { store.config.preferences.enableSounds },
+                        set: { store.setEnableSounds($0) }
+                    ))
+                    .font(.system(size: 12))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
                 }
 
                 sectionCard(title: "Поведение строки меню") {

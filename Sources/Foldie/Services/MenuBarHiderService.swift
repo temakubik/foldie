@@ -83,6 +83,9 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     private var activeFolderLabel: String? = nil
     private var activeAccentColor: NSColor? = nil
     private var activeIconStyle: IconStyle = .color
+    private var activeCapsuleShape: CapsuleShapeStyle = .rounded
+    private var activeLabelMode: StatusBarLabelMode = .iconAndText
+    private var isSwipeEnabled: Bool = true
     private var watchdogTask: Task<Void, Never>?
 
     var onLeftClick: (() -> Void)?
@@ -218,17 +221,30 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         count: Int,
         label: String?,
         accentColor: NSColor? = nil,
-        iconStyle: IconStyle = .color
+        iconStyle: IconStyle = .color,
+        capsuleShape: CapsuleShapeStyle = .rounded,
+        labelMode: StatusBarLabelMode = .iconAndText,
+        swipeEnabled: Bool = true
     ) {
+        let labelModeChanged = (labelMode != activeLabelMode)
         currentSymbolName = symbolName
         badgeCount = count
         activeFolderLabel = label
         activeAccentColor = accentColor
         activeIconStyle = iconStyle
-        updateFolderButtonVisuals()
+        activeCapsuleShape = capsuleShape
+        activeLabelMode = labelMode
+        isSwipeEnabled = swipeEnabled
+
+        if labelModeChanged {
+            configureRoles()
+        } else {
+            updateFolderButtonVisuals()
+        }
     }
 
     func processHorizontalScrollEvent(_ event: NSEvent) {
+        guard isSwipeEnabled else { return }
         // Ignore inertial momentum so one two-finger flick advances exactly one folder cleanly
         guard event.momentumPhase == [] else { return }
         guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15 else { return }
@@ -290,8 +306,10 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         mainFolderView = nil
 
         if let folderItem = folderStatusItem {
+            let mainStyle: StatusBarFolderView.LayoutStyle = activeLabelMode == .iconAndText ? .mainFixedWidth : .pinnedCompact
+            let mainWidth: CGFloat = activeLabelMode == .iconAndText ? StatusBarFolderView.mainFixedWidth : StatusBarFolderView.pinnedFixedWidth
             folderItem.isVisible = true
-            folderItem.length = StatusBarFolderView.mainFixedWidth
+            folderItem.length = mainWidth
             if let button = folderItem.button {
                 button.isEnabled = true
                 button.target = self
@@ -300,8 +318,9 @@ final class MenuBarHiderService: NSObject, ObservableObject {
                 button.image = nil
                 button.title = ""
                 button.attributedTitle = NSAttributedString(string: "")
+                button.clipsToBounds = false
 
-                let folderView = StatusBarFolderView(style: .mainFixedWidth)
+                let folderView = StatusBarFolderView(style: mainStyle)
                 folderView.frame = button.bounds
                 folderView.autoresizingMask = [.width, .height]
                 button.addSubview(folderView)
@@ -342,7 +361,9 @@ final class MenuBarHiderService: NSObject, ObservableObject {
 
     private func updateFolderButtonVisuals() {
         guard let folderItem = folderStatusItem, let button = folderItem.button else { return }
-        folderItem.length = StatusBarFolderView.mainFixedWidth
+        folderItem.length = activeLabelMode == .iconAndText
+            ? StatusBarFolderView.mainFixedWidth
+            : StatusBarFolderView.pinnedFixedWidth
         button.image = nil
         button.title = ""
         button.attributedTitle = NSAttributedString(string: "")
@@ -353,7 +374,8 @@ final class MenuBarHiderService: NSObject, ObservableObject {
             title: displayTitle,
             count: badgeCount,
             accentColor: activeAccentColor,
-            iconStyle: activeIconStyle
+            iconStyle: activeIconStyle,
+            capsuleShape: activeCapsuleShape
         )
 
         if let folderLabel = activeFolderLabel, !folderLabel.isEmpty {
@@ -622,7 +644,8 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     func syncPinnedFolderItems(
         folders: [FoldieFolder],
         counts: [UUID: Int],
-        iconStyle: IconStyle
+        iconStyle: IconStyle,
+        capsuleShape: CapsuleShapeStyle = .rounded
     ) {
         let pinnedFolders = folders.filter { $0.showInMenuBar }
         let wantedIDs = Set(pinnedFolders.map(\.id))
@@ -689,7 +712,8 @@ final class MenuBarHiderService: NSObject, ObservableObject {
                     title: folder.name,
                     count: count,
                     accentColor: folder.nsAccentColor,
-                    iconStyle: iconStyle
+                    iconStyle: iconStyle,
+                    capsuleShape: capsuleShape
                 )
                 button.toolTip = "\(folder.name) — приложений: \(count)"
 

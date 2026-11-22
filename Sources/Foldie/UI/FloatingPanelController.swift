@@ -105,6 +105,9 @@ final class FloatingPanelController: NSObject {
         positionPanel(panel, anchorRect: anchorRect)
 
         if !panel.isVisible {
+            if !fromHover {
+                store.sounds.playPop()
+            }
             panel.alphaValue = 0
             if fromHover {
                 panel.orderFrontRegardless()

@@ -29,10 +29,11 @@ final class StatusBarFolderView: NSView {
 
     private var currentAccentColor: NSColor?
     private var currentIconStyle: IconStyle = .color
+    private var currentCapsuleShape: CapsuleShapeStyle = .rounded
     private var currentCount: Int = 0
 
-    static let mainFixedWidth: CGFloat = 128
-    static let pinnedFixedWidth: CGFloat = 54
+    static let mainFixedWidth: CGFloat = 122
+    static let pinnedFixedWidth: CGFloat = 52
 
     init(style: LayoutStyle) {
         self.layoutStyle = style
@@ -59,9 +60,12 @@ final class StatusBarFolderView: NSView {
     private func setupViews() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.masksToBounds = false
+        clipsToBounds = false
 
         outerCapsule.wantsLayer = true
         outerCapsule.layer?.masksToBounds = true
+        outerCapsule.layer?.cornerCurve = .continuous
         addSubview(outerCapsule)
 
         iconView.imageScaling = .scaleProportionallyDown
@@ -110,10 +114,12 @@ final class StatusBarFolderView: NSView {
         title: String,
         count: Int,
         accentColor: NSColor?,
-        iconStyle: IconStyle
+        iconStyle: IconStyle,
+        capsuleShape: CapsuleShapeStyle = .rounded
     ) {
         currentAccentColor = accentColor
         currentIconStyle = iconStyle
+        currentCapsuleShape = capsuleShape
         currentCount = count
 
         // 1. Configure icon (colored palette or native monochrome template)
@@ -141,8 +147,8 @@ final class StatusBarFolderView: NSView {
             }
         }
 
-        // 3. Configure inner count pill
-        if count > 0 {
+        // 3. Configure inner count pill (always visible in mainFixedWidth so the capsule stays balanced even at 0)
+        if layoutStyle == .mainFixedWidth || count > 0 {
             badgeContainer.isHidden = false
             badgeLabel.stringValue = count > 99 ? "99+" : "\(count)"
         } else {
@@ -167,8 +173,9 @@ final class StatusBarFolderView: NSView {
                 outerCapsule.layer?.borderWidth = 0.75
             }
 
-            // Inner count pill badge (stronger contrast so numbers clearly stand apart from the title)
+            // Inner count pill badge (always crisp; softly muted at 0 so the capsule never looks empty)
             if currentCount > 0 {
+                badgeLabel.textColor = .labelColor
                 if currentIconStyle == .color, let accent = currentAccentColor {
                     badgeContainer.layer?.backgroundColor = accent.withAlphaComponent(0.32).cgColor
                     badgeContainer.layer?.borderColor = accent.withAlphaComponent(0.60).cgColor
@@ -178,16 +185,22 @@ final class StatusBarFolderView: NSView {
                     badgeContainer.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.28).cgColor
                     badgeContainer.layer?.borderWidth = 0.65
                 }
+            } else {
+                badgeLabel.textColor = .secondaryLabelColor
+                badgeContainer.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+                badgeContainer.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.14).cgColor
+                badgeContainer.layer?.borderWidth = 0.6
             }
         }
     }
 
     private func layoutSubviewsFrames() {
-        // Generous capsule height so it fills the macOS menu bar comfortably without looking flattened
-        let capsuleH: CGFloat = min(26, max(21, bounds.height - 2))
+        // Match macOS 26 system indicator height (~24pt) inside the menu bar instead of shrinking to 19pt
+        let capsuleH: CGFloat = max(24, bounds.height)
         let capsuleY: CGFloat = floor((bounds.height - capsuleH) / 2)
         outerCapsule.frame = NSRect(x: 1, y: capsuleY, width: max(22, bounds.width - 2), height: capsuleH)
-        outerCapsule.layer?.cornerRadius = capsuleH / 2.0
+        outerCapsule.layer?.cornerRadius = currentCapsuleShape.cornerRadius(forHeight: capsuleH)
+        outerCapsule.layer?.cornerCurve = .continuous
 
         let cw = outerCapsule.bounds.width
         let ch = outerCapsule.bounds.height
@@ -196,16 +209,20 @@ final class StatusBarFolderView: NSView {
 
         switch layoutStyle {
         case .mainFixedWidth:
-            // Inside 126pt capsule: [ 8px | 15px icon | 5px | ~64px title clip | 5px | 23px count pill | 5px ]
+            // Inside 120pt capsule: [ 8px | 15px icon | 5px | ~60px title clip | 5px | 22px count pill | 5px ]
             iconView.frame = NSRect(x: 8, y: iconY, width: iconSize, height: iconSize)
 
             let badgeH: CGFloat = 16
-            let badgeW: CGFloat = badgeLabel.stringValue.count >= 3 ? 27 : 23
+            let badgeW: CGFloat = badgeLabel.stringValue.count >= 3 ? 26 : 21
             let badgeX = cw - badgeW - 5
             let badgeY = floor((ch - badgeH) / 2)
             badgeContainer.frame = NSRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
-            badgeContainer.layer?.cornerRadius = badgeH / 2.0
-            badgeLabel.frame = NSRect(x: 0, y: 1.5, width: badgeW, height: badgeH - 2)
+            badgeContainer.layer?.cornerRadius = currentCapsuleShape == .capsule ? (badgeH / 2.0) : 4.5
+            badgeContainer.layer?.cornerCurve = .continuous
+            badgeLabel.sizeToFit()
+            let bTextH = ceil(badgeLabel.frame.height)
+            let bTextY = floor((badgeH - bTextH) / 2.0)
+            badgeLabel.frame = NSRect(x: 0, y: bTextY, width: badgeW, height: bTextH)
 
             let titleX: CGFloat = 28
             let rightEdge = badgeContainer.isHidden ? (cw - 8) : (badgeX - 5)
@@ -234,8 +251,12 @@ final class StatusBarFolderView: NSView {
                 iconView.frame = NSRect(x: 7, y: iconY, width: iconSize, height: iconSize)
                 let badgeY = floor((ch - badgeH) / 2)
                 badgeContainer.frame = NSRect(x: cw - badgeW - 5, y: badgeY, width: badgeW, height: badgeH)
-                badgeContainer.layer?.cornerRadius = badgeH / 2.0
-                badgeLabel.frame = NSRect(x: 0, y: 1.5, width: badgeW, height: badgeH - 2)
+                badgeContainer.layer?.cornerRadius = currentCapsuleShape == .capsule ? (badgeH / 2.0) : 4.5
+                badgeContainer.layer?.cornerCurve = .continuous
+                badgeLabel.sizeToFit()
+                let bTextH = ceil(badgeLabel.frame.height)
+                let bTextY = floor((badgeH - bTextH) / 2.0)
+                badgeLabel.frame = NSRect(x: 0, y: bTextY, width: badgeW, height: bTextH)
             }
         }
     }

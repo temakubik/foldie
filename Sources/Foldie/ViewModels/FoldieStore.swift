@@ -30,6 +30,7 @@ final class FoldieStore: ObservableObject {
     let hider: MenuBarHiderService
     let discovery: MenuBarDiscoveryService
     let activator: MenuBarActivationService
+    let sounds: SoundFeedbackService
     private let persistence: PersistenceStore
 
     var onRequestClosePanel: (() -> Void)?
@@ -67,6 +68,8 @@ final class FoldieStore: ObservableObject {
             discoveryService: self.discovery,
             hiderService: self.hider
         )
+        self.sounds = SoundFeedbackService()
+        self.sounds.isEnabled = self.config.preferences.enableSounds
 
         // Forward nested observable changes so SwiftUI updates live
         permissions.objectWillChange
@@ -289,6 +292,7 @@ final class FoldieStore: ObservableObject {
     // MARK: - Activation
 
     func activateItem(key: String, rightClick: Bool = false) {
+        sounds.playPop()
         if let item = liveItemsByKey[key] {
             onRequestClosePanel?()
             activator.activate(
@@ -333,6 +337,33 @@ final class FoldieStore: ObservableObject {
         config.preferences.iconStyle = style
         saveConfig()
         updateStatusBarBadgeForCurrentFolder()
+    }
+
+    func setCapsuleShape(_ shape: CapsuleShapeStyle) {
+        config.preferences.capsuleShape = shape
+        saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
+    }
+
+    func setStatusBarLabelMode(_ mode: StatusBarLabelMode) {
+        config.preferences.statusBarLabelMode = mode
+        saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
+    }
+
+    func setEnableMenuBarSwipe(_ enabled: Bool) {
+        config.preferences.enableMenuBarSwipe = enabled
+        saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
+    }
+
+    func setEnableSounds(_ enabled: Bool) {
+        config.preferences.enableSounds = enabled
+        sounds.isEnabled = enabled
+        if enabled {
+            sounds.playPop()
+        }
+        saveConfig()
     }
 
     /// Resolves the real app icon for any item (live OR offline, including Electron apps like Ollama, Notion, Trae).
@@ -408,6 +439,7 @@ final class FoldieStore: ObservableObject {
         let slots: [UUID?] = [nil] + folders.map { Optional($0.id) }
         let currentIdx = slots.firstIndex(where: { $0 == swipedFolderID }) ?? 0
         let nextIdx = (currentIdx + step + slots.count) % slots.count
+        sounds.playSwipe(forward: step > 0)
         selectSwipedFolder(slots[nextIdx])
     }
 
@@ -599,6 +631,10 @@ final class FoldieStore: ObservableObject {
 
     func updateStatusBarBadgeForCurrentFolder() {
         let iconStyle = config.preferences.iconStyle
+        let capsuleShape = config.preferences.capsuleShape
+        let labelMode = config.preferences.statusBarLabelMode
+        let swipeEnabled = config.preferences.enableMenuBarSwipe
+
         if let activeID = swipedFolderID, let folder = folder(byID: activeID) {
             let count = countVisibleItems(in: folder)
             hider.updateAppearance(
@@ -606,7 +642,10 @@ final class FoldieStore: ObservableObject {
                 count: count,
                 label: folder.name,
                 accentColor: folder.nsAccentColor,
-                iconStyle: iconStyle
+                iconStyle: iconStyle,
+                capsuleShape: capsuleShape,
+                labelMode: labelMode,
+                swipeEnabled: swipeEnabled
             )
         } else {
             swipedFolderID = nil
@@ -615,7 +654,10 @@ final class FoldieStore: ObservableObject {
                 count: visibleLiveItemCount,
                 label: "Все",
                 accentColor: nil,
-                iconStyle: iconStyle
+                iconStyle: iconStyle,
+                capsuleShape: capsuleShape,
+                labelMode: labelMode,
+                swipeEnabled: swipeEnabled
             )
         }
 
@@ -628,7 +670,8 @@ final class FoldieStore: ObservableObject {
         hider.syncPinnedFolderItems(
             folders: folders,
             counts: counts,
-            iconStyle: config.preferences.iconStyle
+            iconStyle: iconStyle,
+            capsuleShape: capsuleShape
         )
     }
 
