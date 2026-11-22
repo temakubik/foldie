@@ -346,59 +346,14 @@ private struct FloatingItemPill: View {
         .onTapGesture {
             store.activateItem(key: itemKey, rightClick: false)
         }
+        .overlay(
+            RightClickOverlay {
+                store.activateItem(key: itemKey, rightClick: true)
+            }
+        )
         .onHover { hovering in
             isHovered = hovering
             if hovering { onHoverSelect() }
-        }
-        .contextMenu {
-            Button {
-                store.activateItem(key: itemKey, rightClick: false)
-            } label: {
-                Label("Открыть", systemImage: "cursorarrow.click")
-            }
-            .disabled(liveItem == nil)
-
-            Button {
-                store.activateItem(key: itemKey, rightClick: true)
-            } label: {
-                Label("Правый клик", systemImage: "cursorarrow.click.2")
-            }
-            .disabled(liveItem == nil)
-
-            let folders = store.allFolders()
-            if !folders.isEmpty || parentFolderID != nil {
-                Divider()
-                Menu {
-                    if parentFolderID != nil {
-                        Button {
-                            store.moveNode(nodeID: nodeID, toFolderID: nil)
-                        } label: {
-                            Label("В корень", systemImage: "tray")
-                        }
-                        if !folders.isEmpty { Divider() }
-                    }
-                    ForEach(folders) { folder in
-                        if folder.id != parentFolderID {
-                            Button {
-                                store.moveNode(nodeID: nodeID, toFolderID: folder.id)
-                            } label: {
-                                Label(folder.name, systemImage: folder.symbolName)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Переместить в папку", systemImage: "folder")
-                }
-            }
-
-            Divider()
-
-            Button {
-                store.onRequestClosePanel?()
-                store.onRequestOpenOrganizer?()
-            } label: {
-                Label("Настройки Foldie...", systemImage: "gearshape")
-            }
         }
     }
 }

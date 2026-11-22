@@ -130,16 +130,17 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         self.currentSymbolName = symbolName
         self.desiredHideState = hideIcons
 
-        // Persist preferred positions near the right edge of the menu bar (distance from right edge).
-        // Smaller value = further RIGHT (visible outside MacBook notch & right of other hiders).
+        // Persist preferred positions at the far right edge of third-party items (smallest distance from right edge).
+        // Placing slotA at 1.0 and slotB at 2.0 puts Foldie directly next to Apple's Control Center / Clock
+        // and places the expanding hider immediately to Foldie's left so ALL third-party icons hide automatically.
         let defaults = UserDefaults.standard
         let keyA = "NSStatusItem Preferred Position \(Self.slotAName)"
         let keyB = "NSStatusItem Preferred Position \(Self.slotBName)"
         if defaults.object(forKey: keyA) == nil {
-            defaults.set(220.0, forKey: keyA)
+            defaults.set(1.0, forKey: keyA)
         }
         if defaults.object(forKey: keyB) == nil {
-            defaults.set(252.0, forKey: keyB)
+            defaults.set(2.0, forKey: keyB)
         }
         defaults.synchronize()
 
@@ -192,8 +193,8 @@ final class MenuBarHiderService: NSObject, ObservableObject {
 
         // Reset Foldie's saved positions right next to Control Center so it pops straight into view
         let defaults = UserDefaults.standard
-        defaults.set(220.0, forKey: "NSStatusItem Preferred Position \(Self.slotAName)")
-        defaults.set(252.0, forKey: "NSStatusItem Preferred Position \(Self.slotBName)")
+        defaults.set(1.0, forKey: "NSStatusItem Preferred Position \(Self.slotAName)")
+        defaults.set(2.0, forKey: "NSStatusItem Preferred Position \(Self.slotBName)")
         defaults.synchronize()
 
         Task { @MainActor [weak self] in
@@ -448,70 +449,72 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         }
     }
 
-    /// Programmatically moves Foldie's folder icon to the right side of the menu bar (using Command-Drag)
-    /// and engages hiding so all third-party menu bar icons tuck neatly inside Foldie in one click.
+    /// Programmatically snaps Foldie's capsule to the far right edge of third-party menu bar items
+    /// (first via NSStatusItem Preferred Position without touching the cursor, then with Command-Drag
+    /// fallback if Accessibility is granted) and engages hiding so all icons tuck inside Foldie automatically.
     func autoCollectAllIcons() async -> AutoCollectResult {
-        // First collapse hider so all status items return to their real onscreen coordinates.
+        // 1. Collapse hider and snap both status items to the rightmost third-party position via Preferred Position.
         applyHidingState(hide: false)
-        try? await Task.sleep(nanoseconds: 220_000_000)
+
+        let defaults = UserDefaults.standard
+        defaults.set(1.0, forKey: "NSStatusItem Preferred Position \(Self.slotAName)")
+        defaults.set(2.0, forKey: "NSStatusItem Preferred Position \(Self.slotBName)")
+        defaults.synchronize()
+
+        createStatusItems()
+        try? await Task.sleep(nanoseconds: 280_000_000)
         reconcileRoleOrder()
 
-        guard AXIsProcessTrusted() else {
-            // Without Accessibility, we can still engage hiding right where Foldie sits.
-            desiredHideState = true
-            applyHidingState(hide: true)
-            return AutoCollectResult(
-                success: false,
-                message: "Выдайте Универсальный доступ, чтобы Foldie мог автоматически переместиться вправо и собрать все иконки."
-            )
-        }
+        // 2. If Accessibility is granted, double-check live coordinates and Command-Drag to the right edge if needed.
+        if AXIsProcessTrusted() {
+            let mainScreenWidth = NSScreen.main?.frame.width ?? 1440
+            let targetRightX = computeIdealFolderTargetX(screenWidth: mainScreenWidth)
 
-        let mainScreenWidth = NSScreen.main?.frame.width ?? 1440
-
-        // Find where the macOS Control Center / Clock system cluster begins on the right,
-        // so we can place Foldie right next to it (just to the left of Control Center).
-        let targetRightX = computeIdealFolderTargetX(screenWidth: mainScreenWidth)
-
-        // Move folder item to the right edge if it's currently sitting too far left
-        if let folderFrame = liveFrame(forAutosaveName: folderAutosaveName, item: folderStatusItem),
-           folderFrame.origin.x > 0,
-           folderFrame.origin.x < targetRightX - 36 {
-            await performCommandDrag(
-                from: CGPoint(x: folderFrame.midX, y: max(12, folderFrame.midY)),
-                to: CGPoint(x: targetRightX, y: max(12, folderFrame.midY))
-            )
-            try? await Task.sleep(nanoseconds: 220_000_000)
-        }
-
-        // Move hider spacer just to the left of folder item
-        if let updatedFolder = liveFrame(forAutosaveName: folderAutosaveName, item: folderStatusItem),
-           let hiderFrame = liveFrame(forAutosaveName: hiderAutosaveName, item: hiderStatusItem),
-           hiderFrame.origin.x > 0 {
-            let desiredHiderX = max(40, updatedFolder.minX - 18)
-            if abs(hiderFrame.midX - desiredHiderX) > 28 || hiderFrame.origin.x >= updatedFolder.origin.x {
+            if let folderFrame = liveFrame(forAutosaveName: folderAutosaveName, item: folderStatusItem),
+               folderFrame.origin.x > 0,
+               folderFrame.origin.x < targetRightX - 36 {
                 await performCommandDrag(
-                    from: CGPoint(x: hiderFrame.midX, y: max(12, hiderFrame.midY)),
-                    to: CGPoint(x: desiredHiderX, y: max(12, updatedFolder.midY))
+                    from: CGPoint(x: folderFrame.midX, y: max(12, folderFrame.midY)),
+                    to: CGPoint(x: targetRightX, y: max(12, folderFrame.midY))
                 )
                 try? await Task.sleep(nanoseconds: 220_000_000)
+            }
+
+            // Temporarily widen the hider spacer to 28pt so macOS actually accepts Command-Drag on it if misordered.
+            if let updatedFolder = liveFrame(forAutosaveName: folderAutosaveName, item: folderStatusItem),
+               let hiderItem = hiderStatusItem {
+                hiderItem.length = 28
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                if let hiderFrame = liveFrame(forAutosaveName: hiderAutosaveName, item: hiderItem),
+                   hiderFrame.origin.x > 0 {
+                    let desiredHiderX = max(40, updatedFolder.minX - 18)
+                    if abs(hiderFrame.midX - desiredHiderX) > 36 || hiderFrame.origin.x >= updatedFolder.origin.x {
+                        await performCommandDrag(
+                            from: CGPoint(x: hiderFrame.midX, y: max(12, hiderFrame.midY)),
+                            to: CGPoint(x: desiredHiderX, y: max(12, updatedFolder.midY))
+                        )
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                    }
+                }
+                hiderItem.length = 1
             }
         }
 
         reconcileRoleOrder()
         desiredHideState = true
         applyHidingState(hide: true)
-        try? await Task.sleep(nanoseconds: 240_000_000)
+        try? await Task.sleep(nanoseconds: 260_000_000)
         updateFolderVisibilityStatus()
 
         if isCurrentlyHiding {
             return AutoCollectResult(
                 success: true,
-                message: "Готово! Иконки собраны в папку Foldie."
+                message: "Готово! Все иконки собраны и скрыты в папке Foldie."
             )
         } else {
             return AutoCollectResult(
                 success: false,
-                message: "Перетащите иконку Foldie с зажатой ⌘ правее других иконок в строке меню, затем включите скрытие."
+                message: "Перетащите капсулу Foldie с зажатой ⌘ вправо к часам и включите скрытие."
             )
         }
     }
@@ -519,11 +522,11 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     private func computeIdealFolderTargetX(screenWidth: CGFloat) -> CGFloat {
         let statusLevel = Int(CGWindowLevelForKey(.statusWindow))
         guard let rawList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
-            return screenWidth - 220
+            return screenWidth - 96
         }
 
         // Look for ControlCenter BentoBox / Clock / WiFi on the right edge to place Foldie right next to them.
-        var systemLeftEdge: CGFloat = screenWidth - 180
+        var systemLeftEdge: CGFloat? = nil
         let systemAnchors: Set<String> = ["Clock", "BentoBox-0", "BentoBox", "WiFi", "Battery"]
         for dict in rawList {
             guard let layerNum = dict[kCGWindowLayer as String] as? NSNumber,
@@ -535,10 +538,12 @@ final class MenuBarHiderService: NSObject, ObservableObject {
                   frame.origin.x > screenWidth * 0.5 else {
                 continue
             }
-            systemLeftEdge = min(systemLeftEdge, frame.minX)
+            systemLeftEdge = min(systemLeftEdge ?? frame.minX, frame.minX)
         }
 
-        return max(screenWidth * 0.55, systemLeftEdge - 14)
+        // If Screen Recording isn't granted, window names are empty: target near right edge so macOS clamps next to Control Center.
+        let anchorX = systemLeftEdge ?? (screenWidth - 84)
+        return max(screenWidth * 0.55, anchorX - 10)
     }
 
     private func performCommandDrag(from start: CGPoint, to end: CGPoint) async {

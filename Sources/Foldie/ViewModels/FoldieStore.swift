@@ -102,8 +102,12 @@ final class FoldieStore: ObservableObject {
 
     func completeOnboarding() {
         config.preferences.hasCompletedOnboarding = true
-        hider.setDesiredHideIcons(config.preferences.hideMenuBarIcons)
         saveConfig()
+        if config.preferences.hideMenuBarIcons {
+            autoCollectAllIcons()
+        } else {
+            hider.setDesiredHideIcons(false)
+        }
     }
 
     func autoCollectAllIcons() {
@@ -579,6 +583,10 @@ final class FoldieStore: ObservableObject {
         cylinderFolderPath = []
         saveConfig()
         updateStatusBarBadgeForCurrentFolder()
+
+        if config.preferences.hideMenuBarIcons {
+            autoCollectAllIcons()
+        }
     }
 
     private func classifyItemCategory(forKey key: String) -> String {
@@ -691,8 +699,12 @@ final class FoldieStore: ObservableObject {
     func setHideMenuBarIcons(_ hide: Bool) {
         config.preferences.hideMenuBarIcons = hide
         activator.cancelPendingRehide()
-        hider.setDesiredHideIcons(hide)
         saveConfig()
+        if hide {
+            autoCollectAllIcons()
+        } else {
+            hider.setDesiredHideIcons(false)
+        }
     }
 
     func toggleTemporaryReveal() {

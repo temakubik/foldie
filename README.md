@@ -3,7 +3,7 @@
 <p align="left">
   <a href="#русский"><b>🇷🇺 Русский</b></a> ·
   <a href="#english"><b>🇬🇧 English</b></a> ·
-  <a href="https://github.com/temakubik/foldie/releases/latest"><b>⬇️ Скачать v1.1.0 / Download</b></a>
+  <a href="https://github.com/temakubik/foldie/releases/latest"><b>⬇️ Скачать v1.1.1 / Download</b></a>
 </p>
 
 > **Минималистичный нативный менеджер строки меню для macOS** — собирает все иконки строки меню в единую аккуратную капсулу, позволяет раскладывать их по папкам и разделителям, переключаться между папками жестами трекпада или мышкой прямо в строке меню и раскрывать их в виде **парящего списка** или **3D-цилиндра (барабана)**.
@@ -18,7 +18,7 @@
   <a href="#что-такое-foldie">О приложении</a> ·
   <a href="#основные-возможности">Возможности</a> ·
   <a href="#установка-готовой-сборки">Установка</a> ·
-  <a href="#разрешения-при-первом-запуске-macos-1426">Разрешения</a> ·
+  <a href="#разрешения-при-первом-запуске-macos-1427">Разрешения</a> ·
   <a href="#сборка-из-исходников">Сборка</a> ·
   <a href="#english">English version →</a>
 </sub>
@@ -46,15 +46,18 @@
 - **Полностью нативное и локальное**: чистый Swift + SwiftUI без сторонних зависимостей и без доступа в сеть.
 
 ### Установка готовой сборки
-1. Скачайте **`Foldie-v1.1.0-macOS-arm64.dmg`** (или `.zip`) со страницы [Releases](https://github.com/temakubik/foldie/releases/latest).
+1. Скачайте **`Foldie-v1.1.1-macOS-arm64.dmg`** (или `.zip`) со страницы [Releases](https://github.com/temakubik/foldie/releases/latest).
 2. Откройте `.dmg` и перетащите **`Foldie.app`** в папку **Applications** (`/Applications`).
 3. Запустите **`Foldie.app`**.
    > Поскольку сборка подписана локальной ad-hoc подписью, при первом запуске macOS может показать предупреждение Gatekeeper: откройте через правый клик → **Открыть** (или разрешите в *Системные настройки → Конфиденциальность и безопасность*), либо выполните `xattr -dr com.apple.quarantine /Applications/Foldie.app`.
 
-### Разрешения при первом запуске (macOS 14–26)
-- **Универсальный доступ (Accessibility)**: нужен для клика по скрытым иконкам и автоматического сбора. В окне *Настройки → Разрешения* можно перетащить карточку `Foldie.app` прямо в список «Универсальный доступ» (а при обновлении сборки — нажать **«Сбросить старую запись»**).
+### Разрешения при первом запуске (macOS 14–27)
+- **Скрытие иконок с панели работает автоматически** (Foldie сам привязывается к правому краю строки меню — даже без выдачи системных разрешений).
+- **Универсальный доступ (Accessibility)** / **System & App Protection Override (macOS 27.3+)**: нужен, чтобы клики по приложениям внутри Foldie открывали их собственные выпадающие меню строки меню.
+  - На macOS 14–26: в окне *Настройки → Разрешения* перетащите карточку `Foldie.app` прямо в список «Универсальный доступ» (при обновлении нажмите **«Сбросить старую запись»**).
+  - На macOS 27.3+: Apple перенесла разрешения для сторонних утилит в раздел **System & App Protection Override**. Если приложение отображается серым в окне выбора, сначала снимите карантин (`xattr -dr com.apple.quarantine /Applications/Foldie.app`) либо соберите Foldie локально со своим доверенным сертификатом подписи кода в «Связке ключей».
 - **Запись экрана (Screen Recording)** *(по желанию)*: для живых миниатюр системных иконок.
-- **macOS 26 (Tahoe)**: убедитесь, что **Foldie** включён в *Системные настройки → Строка меню → «Разрешить в строке меню»*.
+- **macOS 26+**: убедитесь, что **Foldie** включён в *Системные настройки → Строка меню → «Разрешить в строке меню»*.
 
 ### Сборка из исходников
 Требуется macOS 14+ и Apple Command Line Tools (`swiftc`).
@@ -74,7 +77,7 @@ open Foldie.app
   <a href="#what-is-foldie">About</a> ·
   <a href="#key-features">Features</a> ·
   <a href="#download--install">Download</a> ·
-  <a href="#first-time-permissions-macos-1426">Permissions</a> ·
+  <a href="#first-time-permissions-macos-1427">Permissions</a> ·
   <a href="#build-from-source">Build</a> ·
   <a href="#русский">↑ Русская версия</a>
 </sub>
@@ -102,15 +105,18 @@ macOS menu bars get crowded quickly — especially on MacBooks with a notch. **F
 - **100% Native & Private**: Pure Swift & SwiftUI (`AppKit`, `ScreenCaptureKit`, `ApplicationServices`), zero third-party dependencies, zero network access.
 
 ### Download & Install
-1. Download **`Foldie-v1.1.0-macOS-arm64.dmg`** (or `.zip`) from the [Releases](https://github.com/temakubik/foldie/releases/latest) page.
+1. Download **`Foldie-v1.1.1-macOS-arm64.dmg`** (or `.zip`) from the [Releases](https://github.com/temakubik/foldie/releases/latest) page.
 2. Open the `.dmg` and drag **`Foldie.app`** into **Applications** (`/Applications`).
 3. Launch **`Foldie.app`**.
    > Because this release is locally signed (ad-hoc), on first open macOS Gatekeeper may ask for confirmation: right-click `Foldie.app` → **Open** (or allow in *System Settings → Privacy & Security*), or run `xattr -dr com.apple.quarantine /Applications/Foldie.app`.
 
-### First-Time Permissions (macOS 14–26)
-- **Accessibility** (*System Settings → Privacy & Security → Accessibility*): Required to click hidden menu bar items and auto-collect icons. You can drag the `Foldie.app` card right out of Foldie's Permissions tab into the Accessibility list (and use **Reset stale entry** if upgrading an ad-hoc build).
+### First-Time Permissions (macOS 14–27)
+- **Menu bar icon hiding works automatically** (Foldie snaps itself to the right edge of third-party items without requiring Accessibility).
+- **Accessibility** / **System & App Protection Override (macOS 27.3+)**: required so clicking an app inside Foldie opens that app's own native menu bar dropdown/context menu.
+  - On macOS 14–26: drag the `Foldie.app` card from *Settings → Permissions* into Accessibility (use **Reset stale entry** after upgrading an ad-hoc build).
+  - On macOS 27.3+: Apple moved third-party automation utilities into **System & App Protection Override**. If Foldie appears greyed out in the picker due to ad-hoc signing/quarantine, run `xattr -dr com.apple.quarantine /Applications/Foldie.app` or build locally with a trusted code-signing certificate in Keychain.
 - **Screen Recording** *(optional)*: Enables live menu bar thumbnails and system item titles.
-- **macOS 26 (Tahoe) Menu Bar**: Ensure **Foldie** is enabled in *System Settings → Menu Bar → Allow in the Menu Bar*.
+- **macOS 26+ Menu Bar**: Ensure **Foldie** is enabled in *System Settings → Menu Bar → Allow in the Menu Bar*.
 
 ### Build from Source
 Requires macOS 14+ and Apple Command Line Tools (`swiftc`).

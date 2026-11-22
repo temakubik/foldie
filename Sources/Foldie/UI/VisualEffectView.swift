@@ -64,3 +64,35 @@ struct MenuBarIconPreview: View {
         .frame(width: size, height: size)
     }
 }
+
+/// Transparent overlay that forwards right-clicks directly to a callback while remaining
+/// 100% invisible to left-clicks, hovers, drags, and scroll events.
+struct RightClickOverlay: NSViewRepresentable {
+    let onRightClick: () -> Void
+
+    func makeNSView(context: Context) -> RightClickCatcherNSView {
+        let view = RightClickCatcherNSView()
+        view.onRightClick = onRightClick
+        return view
+    }
+
+    func updateNSView(_ nsView: RightClickCatcherNSView, context: Context) {
+        nsView.onRightClick = onRightClick
+    }
+}
+
+final class RightClickCatcherNSView: NSView {
+    var onRightClick: (() -> Void)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = NSApp.currentEvent,
+              event.type == .rightMouseDown || event.type == .rightMouseUp else {
+            return nil
+        }
+        return bounds.contains(convert(point, from: superview)) ? self : nil
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?()
+    }
+}

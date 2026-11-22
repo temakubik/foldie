@@ -31,34 +31,66 @@ final class MenuBarActivationService {
         }
 
         // Allow WindowServer to lay out the unhidden menu bar items before clicking.
-        let revealDelay: UInt64 = wasHiding ? 110_000_000 : 25_000_000
+        let revealDelay: UInt64 = wasHiding ? 220_000_000 : 40_000_000
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: revealDelay)
 
-            let liveFrame = self.discoveryService.locateLiveFrame(for: item) ?? item.frame
-            let isLikelyVisible = liveFrame.origin.x >= 0 && liveFrame.width >= 4
-
             var activated = false
 
-            if isLikelyVisible {
-                activated = self.performSyntheticClick(at: CGPoint(x: liveFrame.midX, y: liveFrame.midY), rightClick: rightClick)
-            }
-
-            if !activated && !rightClick {
+            // 1. For left-click, prefer Accessibility AXPress directly on the target app's AXExtrasMenuBar item:
+            //    this opens the app's native menu bar dropdown reliably and can never click Foldie by mistake.
+            if !rightClick {
                 activated = self.performAccessibilityPress(for: item)
             }
 
+            // 2. For right-click (or apps whose status item doesn't respond to AXPress), locate its live
+            //    unhidden frame, verify it does NOT overlap Foldie's own capsule, and send a synthetic click.
             if !activated {
-                // Last resort: activate the owning application directly.
-                NSRunningApplication(processIdentifier: item.pid)?.activate()
+                if let liveFrame = self.discoveryService.locateLiveFrame(for: item),
+                   liveFrame.origin.x >= 0,
+                   liveFrame.width >= 4,
+                   !self.overlapsFoldieCapsule(cgRect: liveFrame) {
+                    activated = self.performSyntheticClick(
+                        at: CGPoint(x: liveFrame.midX, y: liveFrame.midY),
+                        rightClick: rightClick
+                    )
+                }
+            }
+
+            if !activated {
+                // 3. Fallback when Accessibility / System & App Protection Override isn't granted:
+                //    activate or reopen the owning application cleanly via AppKit/NSWorkspace.
+                if let app = NSRunningApplication(processIdentifier: item.pid) {
+                    app.activate()
+                }
+                if let bundleID = item.bundleIdentifier,
+                   let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                    NSWorkspace.shared.openApplication(
+                        at: appURL,
+                        configuration: NSWorkspace.OpenConfiguration()
+                    ) { _, _ in }
+                }
             }
 
             if wasHiding {
                 self.scheduleRehide(mode: rehideMode)
             }
         }
+    }
+
+    /// Prevents synthetic clicks from ever landing on Foldie's own status bar button.
+    private func overlapsFoldieCapsule(cgRect: CGRect) -> Bool {
+        guard let appKitRect = hiderService.folderButtonScreenFrame else { return false }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 900
+        let foldieCGRect = CGRect(
+            x: appKitRect.origin.x,
+            y: primaryHeight - appKitRect.maxY,
+            width: appKitRect.width,
+            height: appKitRect.height
+        )
+        return foldieCGRect.insetBy(dx: -2, dy: -2).contains(CGPoint(x: cgRect.midX, y: cgRect.midY))
     }
 
     func cancelPendingRehide() {
@@ -108,6 +140,9 @@ final class MenuBarActivationService {
 
     /// Posts a synthetic left or right click at the given global CG coordinates and restores cursor position.
     private func performSyntheticClick(at targetPoint: CGPoint, rightClick: Bool) -> Bool {
+        guard AXIsProcessTrusted() else {
+            return false
+        }
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             return false
         }

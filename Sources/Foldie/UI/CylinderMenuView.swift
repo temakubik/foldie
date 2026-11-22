@@ -179,6 +179,13 @@ struct CylinderMenuView: View {
                         )
                 )
         )
+        .overlay {
+            if case .item(let key) = node {
+                RightClickOverlay {
+                    store.activateItem(key: key, rightClick: true)
+                }
+            }
+        }
         .shadow(
             color: Color.black.opacity(isCentered ? 0.26 : 0.12),
             radius: isCentered ? 6 : 3,
@@ -195,34 +202,6 @@ struct CylinderMenuView: View {
         .position(x: centerX, y: yPos)
         .opacity(opacity)
         .zIndex(100.0 - abs(delta) * 10.0)
-        .contextMenu {
-            if case .item(let key) = node {
-                Button {
-                    store.activateItem(key: key, rightClick: false)
-                } label: {
-                    Label("Открыть", systemImage: "cursorarrow.click")
-                }
-                Button {
-                    store.activateItem(key: key, rightClick: true)
-                } label: {
-                    Label("Правый клик", systemImage: "cursorarrow.click.2")
-                }
-                Divider()
-            } else if case .folder(let folder) = node {
-                Button {
-                    store.enterCylinderFolder(folder)
-                } label: {
-                    Label("Открыть папку", systemImage: "folder")
-                }
-                Divider()
-            }
-            Button {
-                store.onRequestClosePanel?()
-                store.onRequestOpenOrganizer?()
-            } label: {
-                Label("Настройки Foldie...", systemImage: "gearshape")
-            }
-        }
     }
 
     @ViewBuilder
