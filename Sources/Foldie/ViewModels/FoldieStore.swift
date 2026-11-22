@@ -598,19 +598,24 @@ final class FoldieStore: ObservableObject {
     }
 
     func updateStatusBarBadgeForCurrentFolder() {
+        let iconStyle = config.preferences.iconStyle
         if let activeID = swipedFolderID, let folder = folder(byID: activeID) {
             let count = countVisibleItems(in: folder)
             hider.updateAppearance(
                 symbolName: folder.symbolName,
                 count: count,
-                label: folder.name
+                label: folder.name,
+                accentColor: folder.nsAccentColor,
+                iconStyle: iconStyle
             )
         } else {
             swipedFolderID = nil
             hider.updateAppearance(
                 symbolName: config.preferences.statusIconSymbol,
                 count: visibleLiveItemCount,
-                label: nil
+                label: "Все",
+                accentColor: nil,
+                iconStyle: iconStyle
             )
         }
 

@@ -203,11 +203,18 @@ private struct FloatingFolderPill: View {
             Spacer(minLength: 4)
 
             Text("\(store.countVisibleItems(in: folder))")
-                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Capsule().fill(Color.primary.opacity(0.08)))
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(isMono ? Color.primary.opacity(0.85) : folder.accentColor)
+                .padding(.horizontal, 5.5)
+                .padding(.vertical, 1.5)
+                .background(
+                    Capsule()
+                        .fill(isMono ? Color.primary.opacity(0.12) : folder.accentColor.opacity(0.20))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(isMono ? Color.primary.opacity(0.18) : folder.accentColor.opacity(0.45), lineWidth: 0.6)
+                        )
+                )
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 4.5)

@@ -248,8 +248,18 @@ struct CylinderMenuView: View {
                 Spacer(minLength: 4)
 
                 Text("\(store.countVisibleItems(in: folder))")
-                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(isMono ? Color.primary.opacity(0.85) : folder.accentColor)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(
+                        Capsule()
+                            .fill(isMono ? Color.primary.opacity(0.12) : folder.accentColor.opacity(0.20))
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(isMono ? Color.primary.opacity(0.18) : folder.accentColor.opacity(0.45), lineWidth: 0.6)
+                            )
+                    )
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8.5, weight: .bold))

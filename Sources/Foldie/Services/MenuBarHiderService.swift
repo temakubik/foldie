@@ -81,6 +81,8 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     private var currentSymbolName: String = "folder.fill"
     private var badgeCount: Int = 0
     private var activeFolderLabel: String? = nil
+    private var activeAccentColor: NSColor? = nil
+    private var activeIconStyle: IconStyle = .color
     private var watchdogTask: Task<Void, Never>?
 
     var onLeftClick: (() -> Void)?
@@ -94,9 +96,11 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     var onPinnedFolderHoverChanged: ((UUID, Bool) -> Void)?
 
     private var pinnedFolderItems: [UUID: NSStatusItem] = [:]
+    private var pinnedFolderViews: [UUID: StatusBarFolderView] = [:]
     private var pinnedButtonToFolderID: [ObjectIdentifier: UUID] = [:]
     private var lastKnownPinnedFrames: [UUID: CGRect] = [:]
 
+    private weak var mainFolderView: StatusBarFolderView?
     private weak var activeHoverView: StatusButtonHoverView?
     private var horizontalSwipeAccumulator: CGFloat = 0
     private var lastHorizontalSwipeTime: Date = .distantPast
@@ -150,7 +154,7 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         if let oldA = slotA { NSStatusBar.system.removeStatusItem(oldA) }
         if let oldB = slotB { NSStatusBar.system.removeStatusItem(oldB) }
 
-        let itemA = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let itemA = NSStatusBar.system.statusItem(withLength: StatusBarFolderView.mainFixedWidth)
         itemA.autosaveName = Self.slotAName
         itemA.isVisible = true
 
@@ -209,10 +213,18 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         updateFolderButtonVisuals()
     }
 
-    func updateAppearance(symbolName: String, count: Int, label: String?) {
+    func updateAppearance(
+        symbolName: String,
+        count: Int,
+        label: String?,
+        accentColor: NSColor? = nil,
+        iconStyle: IconStyle = .color
+    ) {
         currentSymbolName = symbolName
         badgeCount = count
         activeFolderLabel = label
+        activeAccentColor = accentColor
+        activeIconStyle = iconStyle
         updateFolderButtonVisuals()
     }
 
@@ -274,23 +286,35 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     private func configureRoles() {
         activeHoverView?.removeFromSuperview()
         activeHoverView = nil
+        mainFolderView?.removeFromSuperview()
+        mainFolderView = nil
 
         if let folderItem = folderStatusItem {
             folderItem.isVisible = true
-            folderItem.length = NSStatusItem.variableLength
+            folderItem.length = StatusBarFolderView.mainFixedWidth
             if let button = folderItem.button {
                 button.isEnabled = true
                 button.target = self
                 button.action = #selector(handleStatusButtonClick(_:))
                 button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+                button.image = nil
+                button.title = ""
+                button.attributedTitle = NSAttributedString(string: "")
 
-                // Attach hover detector overlay so hovering over Foldie opens the menu smoothly
+                let folderView = StatusBarFolderView(style: .mainFixedWidth)
+                folderView.frame = button.bounds
+                folderView.autoresizingMask = [.width, .height]
+                button.addSubview(folderView)
+                mainFolderView = folderView
+
+                // Attach hover detector overlay so hovering opens menu & marquee-scrolls overflowing folder names
                 let hoverView = StatusButtonHoverView(frame: button.bounds)
                 hoverView.autoresizingMask = [.width, .height]
                 hoverView.onHoverChanged = { [weak self] hovering in
                     if hovering {
                         self?.captureAnchorFromCurrentPointer()
                     }
+                    self?.mainFolderView?.setHovering(hovering)
                     self?.onHoverChanged?(hovering)
                 }
                 hoverView.onScrollWheel = { [weak self] event in
@@ -318,38 +342,24 @@ final class MenuBarHiderService: NSObject, ObservableObject {
 
     private func updateFolderButtonVisuals() {
         guard let folderItem = folderStatusItem, let button = folderItem.button else { return }
-        folderItem.length = NSStatusItem.variableLength
+        folderItem.length = StatusBarFolderView.mainFixedWidth
+        button.image = nil
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
 
-        let config = NSImage.SymbolConfiguration(pointSize: 13.5, weight: .medium)
-        if let image = NSImage(systemSymbolName: currentSymbolName, accessibilityDescription: "Foldie")?
-            .withSymbolConfiguration(config) {
-            image.isTemplate = true
-            button.image = image
-            button.imagePosition = badgeCount > 0 ? .imageLeading : .imageOnly
-        } else {
-            button.image = nil
-        }
+        let displayTitle = (activeFolderLabel?.isEmpty == false) ? (activeFolderLabel ?? "Все") : "Все"
+        mainFolderView?.configure(
+            symbolName: currentSymbolName,
+            title: displayTitle,
+            count: badgeCount,
+            accentColor: activeAccentColor,
+            iconStyle: activeIconStyle
+        )
 
         if let folderLabel = activeFolderLabel, !folderLabel.isEmpty {
-            let shortLabel = folderLabel.count > 10 ? String(folderLabel.prefix(9)) + "…" : folderLabel
-            let text = badgeCount > 0 ? " \(shortLabel) \(badgeCount)" : " \(shortLabel)"
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold),
-                .baselineOffset: 0.5
-            ]
-            button.attributedTitle = NSAttributedString(string: text, attributes: attrs)
             button.toolTip = "Foldie — папка «\(folderLabel)» (\(badgeCount)). Свайп влево/вправо для смены папки."
-        } else if badgeCount > 0 {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold),
-                .baselineOffset: 0.5
-            ]
-            button.attributedTitle = NSAttributedString(string: " \(badgeCount)", attributes: attrs)
-            button.toolTip = "Foldie — приложений в папке: \(badgeCount). Свайп влево/вправо для смены папки."
         } else {
-            button.attributedTitle = NSAttributedString(string: "")
-            button.title = ""
-            button.toolTip = "Foldie — папка иконок строки меню"
+            button.toolTip = "Foldie — приложений: \(badgeCount). Свайп влево/вправо для смены папки."
         }
     }
 
@@ -624,10 +634,11 @@ final class MenuBarHiderService: NSObject, ObservableObject {
             }
             NSStatusBar.system.removeStatusItem(item)
             pinnedFolderItems.removeValue(forKey: id)
+            pinnedFolderViews.removeValue(forKey: id)
             lastKnownPinnedFrames.removeValue(forKey: id)
         }
 
-        // Create or update each pinned folder status item
+        // Create or update each pinned folder status item with fixed compact width & pill count badge
         let defaults = UserDefaults.standard
         for (idx, folder) in pinnedFolders.enumerated() {
             let autosave = "com.foldie.app.folder.\(folder.id.uuidString)"
@@ -637,11 +648,10 @@ final class MenuBarHiderService: NSObject, ObservableObject {
             } else {
                 let prefKey = "NSStatusItem Preferred Position \(autosave)"
                 if defaults.object(forKey: prefKey) == nil {
-                    // Place pinned folders cleanly on the right side next to Foldie (right of hider spacer!)
-                    defaults.set(max(120.0, 210.0 - Double(idx + 1) * 32.0), forKey: prefKey)
+                    defaults.set(max(120.0, 210.0 - Double(idx + 1) * 52.0), forKey: prefKey)
                     defaults.synchronize()
                 }
-                let created = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+                let created = NSStatusBar.system.statusItem(withLength: StatusBarFolderView.pinnedFixedWidth)
                 created.autosaveName = autosave
                 created.isVisible = true
                 pinnedFolderItems[folder.id] = created
@@ -649,7 +659,7 @@ final class MenuBarHiderService: NSObject, ObservableObject {
             }
 
             statusItem.isVisible = true
-            statusItem.length = NSStatusItem.variableLength
+            statusItem.length = StatusBarFolderView.pinnedFixedWidth
 
             if let button = statusItem.button {
                 pinnedButtonToFolderID[ObjectIdentifier(button)] = folder.id
@@ -657,40 +667,32 @@ final class MenuBarHiderService: NSObject, ObservableObject {
                 button.target = self
                 button.action = #selector(handlePinnedFolderClick(_:))
                 button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+                button.image = nil
+                button.title = ""
+                button.attributedTitle = NSAttributedString(string: "")
 
-                // Render custom SF Symbol with folder's custom color (or crisp monochrome template)
-                let baseConfig = NSImage.SymbolConfiguration(pointSize: 13.5, weight: .semibold)
-                let image: NSImage?
-                if iconStyle == .color {
-                    let paletteConfig = baseConfig.applying(.init(paletteColors: [folder.nsAccentColor]))
-                    let colored = NSImage(systemSymbolName: folder.symbolName, accessibilityDescription: folder.name)?
-                        .withSymbolConfiguration(paletteConfig)
-                    colored?.isTemplate = false
-                    image = colored
+                let folderView: StatusBarFolderView
+                if let existingView = pinnedFolderViews[folder.id], existingView.superview === button {
+                    folderView = existingView
                 } else {
-                    let mono = NSImage(systemSymbolName: folder.symbolName, accessibilityDescription: folder.name)?
-                        .withSymbolConfiguration(baseConfig)
-                    mono?.isTemplate = true
-                    image = mono
+                    let createdView = StatusBarFolderView(style: .pinnedCompact)
+                    createdView.frame = button.bounds
+                    createdView.autoresizingMask = [.width, .height]
+                    button.addSubview(createdView)
+                    pinnedFolderViews[folder.id] = createdView
+                    folderView = createdView
                 }
 
                 let count = counts[folder.id] ?? 0
-                button.image = image
-                button.imagePosition = count > 0 ? .imageLeading : .imageOnly
-
-                if count > 0 {
-                    let attrs: [NSAttributedString.Key: Any] = [
-                        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
-                        .baselineOffset: 0.5
-                    ]
-                    button.attributedTitle = NSAttributedString(string: " \(count)", attributes: attrs)
-                } else {
-                    button.attributedTitle = NSAttributedString(string: "")
-                    button.title = ""
-                }
+                folderView.configure(
+                    symbolName: folder.symbolName,
+                    title: folder.name,
+                    count: count,
+                    accentColor: folder.nsAccentColor,
+                    iconStyle: iconStyle
+                )
                 button.toolTip = "\(folder.name) — приложений: \(count)"
 
-                // Ensure hover tracking view is attached
                 let hasHover = button.subviews.contains { $0 is StatusButtonHoverView }
                 if !hasHover {
                     let folderID = folder.id
@@ -794,10 +796,11 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         guard let screen else { return }
         let menuBarHeight = max(24, screen.frame.maxY - screen.visibleFrame.maxY)
         if mouse.y >= screen.visibleFrame.maxY - 6 {
+            let w = StatusBarFolderView.mainFixedWidth
             lastKnownFolderScreenFrame = CGRect(
-                x: mouse.x - 22,
+                x: mouse.x - w / 2,
                 y: screen.visibleFrame.maxY,
-                width: 44,
+                width: w,
                 height: menuBarHeight
             )
         }
