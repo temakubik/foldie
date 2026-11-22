@@ -2,5 +2,6 @@
 .build-foldie/
 Foldie.app/
 *.zip
+*.dmg
 .DS_Store
 *.xcuserstate
