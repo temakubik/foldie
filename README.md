@@ -3,7 +3,7 @@
 <p align="left">
   <a href="#русский"><b>🇷🇺 Русский</b></a> ·
   <a href="#english"><b>🇬🇧 English</b></a> ·
-  <a href="https://github.com/temakubik/foldie/releases/latest"><b>⬇️ Скачать v1.1.1 / Download</b></a>
+  <a href="https://github.com/temakubik/foldie/releases/latest"><b>⬇️ Скачать v1.2.0 / Download</b></a>
 </p>
 
 > **Минималистичный нативный менеджер строки меню для macOS** — собирает все иконки строки меню в единую аккуратную капсулу, позволяет раскладывать их по папкам и разделителям, переключаться между папками жестами трекпада или мышкой прямо в строке меню и раскрывать их в виде **парящего списка** или **3D-цилиндра (барабана)**.
@@ -43,10 +43,11 @@
 - **Тактильные микро-звуки**: мягкий синтезированный «пуньк» при клике/открытии, направленный звук при свайпе папок и тихий «тик» при вращении 3D-барабана (отключается в *Настройки → Поведение и вид*).
 - **Стили иконок — «Цветные» и «Моно»**: переключение между оригинальными цветными иконками приложений и минималистичным монохромом.
 - **Полноценное окно настроек и сортировки** *(Правый клик по Foldie → «Настройки Foldie...»)*: создание цветных папок с иконками SF Symbols, разделители, перетаскивание, индивидуальные тумблеры отображения и автосбор в один клик.
-- **Полностью нативное и локальное**: чистый Swift + SwiftUI без сторонних зависимостей и без доступа в сеть.
+- **Встроенное автообновление и вкладка «Справка»**: Foldie автоматически проверяет новые релизы на GitHub, скачивает и устанавливает обновления в один клик с автоматическим перезапуском (отключается в *Настройки → Поведение и вид*).
+- **Полностью нативное и приватное**: чистый Swift + SwiftUI без сторонних зависимостей, никакой телеметрии (сеть используется только для проверки обновлений на GitHub Releases).
 
 ### Установка готовой сборки
-1. Скачайте **`Foldie-v1.1.1-macOS-arm64.dmg`** (или `.zip`) со страницы [Releases](https://github.com/temakubik/foldie/releases/latest).
+1. Скачайте **`Foldie-v1.2.0-macOS-arm64.dmg`** (или `.zip`) со страницы [Releases](https://github.com/temakubik/foldie/releases/latest).
 2. Откройте `.dmg` и перетащите **`Foldie.app`** в папку **Applications** (`/Applications`).
 3. Запустите **`Foldie.app`**.
    > Поскольку сборка подписана локальной ad-hoc подписью, при первом запуске macOS может показать предупреждение Gatekeeper: откройте через правый клик → **Открыть** (или разрешите в *Системные настройки → Конфиденциальность и безопасность*), либо выполните `xattr -dr com.apple.quarantine /Applications/Foldie.app`.
@@ -102,10 +103,11 @@ macOS menu bars get crowded quickly — especially on MacBooks with a notch. **F
 - **Tactile Micro-Sounds**: Subtle synthesized audio feedback for click/open, directional folder swipes, and 3D drum ticks (toggleable in *Settings → Behavior & Appearance*).
 - **Color & Monochrome Icon Styles**: Switch between original colorful app icons and monochrome menu-bar-style icons.
 - **Full Organizer & Settings Window** *(Right-click Foldie → Settings)*: Create colored folders with custom SF Symbols, add labeled dividers, drag & drop to reorder, toggle individual app visibility, and one-click auto-collect.
-- **100% Native & Private**: Pure Swift & SwiftUI (`AppKit`, `ScreenCaptureKit`, `ApplicationServices`), zero third-party dependencies, zero network access.
+- **Built-In Auto-Updater & Help Tab**: Foldie automatically checks GitHub Releases and downloads/installs updates in one click with seamless relaunch (toggleable in *Settings → Behavior & Appearance*), plus a built-in Help guide right inside Settings.
+- **100% Native & Private**: Pure Swift & SwiftUI (`AppKit`, `ScreenCaptureKit`, `ApplicationServices`), zero third-party dependencies, zero telemetry (network is used only for optional GitHub Releases update checks).
 
 ### Download & Install
-1. Download **`Foldie-v1.1.1-macOS-arm64.dmg`** (or `.zip`) from the [Releases](https://github.com/temakubik/foldie/releases/latest) page.
+1. Download **`Foldie-v1.2.0-macOS-arm64.dmg`** (or `.zip`) from the [Releases](https://github.com/temakubik/foldie/releases/latest) page.
 2. Open the `.dmg` and drag **`Foldie.app`** into **Applications** (`/Applications`).
 3. Launch **`Foldie.app`**.
    > Because this release is locally signed (ad-hoc), on first open macOS Gatekeeper may ask for confirmation: right-click `Foldie.app` → **Open** (or allow in *System Settings → Privacy & Security*), or run `xattr -dr com.apple.quarantine /Applications/Foldie.app`.

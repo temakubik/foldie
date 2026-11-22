@@ -216,6 +216,7 @@ struct FoldiePreferences: Codable, Hashable, Sendable {
     var autoRehideMode: AutoRehideMode = .onOutsideClick
     var statusIconSymbol: String = "folder.fill"
     var launchAtLogin: Bool = false
+    var autoCheckUpdates: Bool = true
     var hasCompletedOnboarding: Bool = false
     var dismissedOnboardingTip: Bool = false
     var dismissedPermissionBanner: Bool = false
@@ -223,7 +224,7 @@ struct FoldiePreferences: Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case displayMode, cylinderScope, iconStyle, capsuleShape, statusBarLabelMode, enableMenuBarSwipe,
              enableSounds, hideMenuBarIcons, showSystemItems, showOfflineItems, autoRehideMode,
-             statusIconSymbol, launchAtLogin, hasCompletedOnboarding, dismissedOnboardingTip,
+             statusIconSymbol, launchAtLogin, autoCheckUpdates, hasCompletedOnboarding, dismissedOnboardingTip,
              dismissedPermissionBanner
     }
 
@@ -244,6 +245,7 @@ struct FoldiePreferences: Codable, Hashable, Sendable {
         autoRehideMode = try c.decodeIfPresent(AutoRehideMode.self, forKey: .autoRehideMode) ?? .onOutsideClick
         statusIconSymbol = try c.decodeIfPresent(String.self, forKey: .statusIconSymbol) ?? "folder.fill"
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        autoCheckUpdates = try c.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
         hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? false
         dismissedOnboardingTip = try c.decodeIfPresent(Bool.self, forKey: .dismissedOnboardingTip) ?? false
         dismissedPermissionBanner = try c.decodeIfPresent(Bool.self, forKey: .dismissedPermissionBanner) ?? false

@@ -185,6 +185,20 @@ final class FoldieAppDelegate: NSObject, NSApplicationDelegate {
         refreshItem.target = self
         menu.addItem(refreshItem)
 
+        let updateTitle: String
+        if let release = store.updater.state.availableRelease {
+            updateTitle = "Обновить Foldie до v\(release.version)..."
+        } else {
+            updateTitle = "Проверить обновления..."
+        }
+        let updateItem = NSMenuItem(
+            title: updateTitle,
+            action: #selector(menuCheckForUpdates),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        menu.addItem(updateItem)
+
         let onboardingItem = NSMenuItem(
             title: "Показать онбординг...",
             action: #selector(menuShowOnboarding),
@@ -246,6 +260,17 @@ final class FoldieAppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuRefresh() {
         store?.refreshItems(captureThumbnails: true)
+    }
+
+    @objc private func menuCheckForUpdates() {
+        guard let store else { return }
+        panelController?.close()
+        organizerController?.show()
+        if store.updater.state.availableRelease != nil {
+            store.updater.installAvailableUpdate()
+        } else {
+            store.updater.checkForUpdates(userInitiated: true)
+        }
     }
 
     @objc private func menuShowOnboarding() {

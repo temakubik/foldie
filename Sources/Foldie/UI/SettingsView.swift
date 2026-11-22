@@ -243,6 +243,35 @@ struct SettingsView: View {
                     .buttonStyle(.link)
                 }
 
+                sectionCard(title: "Обновления") {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Текущая версия: v\(store.updater.currentVersion)")
+                                .font(.system(size: 12, weight: .semibold))
+                            updateStatusLabel
+                        }
+
+                        Spacer()
+
+                        updateActionButtons
+                    }
+
+                    if case .downloading(_, let progress) = store.updater.state {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                    }
+
+                    Divider().opacity(0.4)
+
+                    Toggle("Проверять обновления автоматически (GitHub Releases)", isOn: Binding(
+                        get: { store.config.preferences.autoCheckUpdates },
+                        set: { store.setAutoCheckUpdates($0) }
+                    ))
+                    .font(.system(size: 12))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+
                 sectionCard(title: "Приложение") {
                     Toggle("Запускать Foldie при входе в систему", isOn: Binding(
                         get: { store.config.preferences.launchAtLogin },
@@ -337,6 +366,62 @@ struct SettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.mini)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatusLabel: some View {
+        switch store.updater.state {
+        case .idle:
+            Text("Автообновление из github.com/temakubik/foldie")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+        case .checking:
+            Text("Проверяем наличие новой версии...")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+        case .upToDate:
+            Text("Установлена последняя версия ✓")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.green)
+        case .available(let release):
+            Text("Доступна новая версия v\(release.version)")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+        case .downloading(let version, let progress):
+            Text("Загружаем v\(version)... \(Int(progress * 100))%")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+        case .installing(let version):
+            Text("Устанавливаем v\(version) и перезапускаем Foldie...")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+        case .error(let msg):
+            Text(msg)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var updateActionButtons: some View {
+        switch store.updater.state {
+        case .available(let release):
+            Button("Обновить до v\(release.version)") {
+                store.updater.installAvailableUpdate()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        case .checking, .downloading, .installing:
+            ProgressView()
+                .controlSize(.small)
+        default:
+            Button("Проверить") {
+                store.updater.checkForUpdates(userInitiated: true)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 }

@@ -9,7 +9,7 @@ struct HelpGuideView: View {
     @State private var copiedCommandID: String?
 
     private var appVersion: String {
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.1.2"
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.2.0"
     }
 
     var body: some View {
@@ -318,16 +318,29 @@ struct HelpGuideView: View {
 
             Spacer()
 
-            Button {
-                if let url = URL(string: "https://github.com/temakubik/foldie/releases/latest") {
-                    NSWorkspace.shared.open(url)
+            if let release = store.updater.state.availableRelease {
+                Button {
+                    store.updater.installAvailableUpdate()
+                } label: {
+                    Label("Обновить до v\(release.version)", systemImage: "arrow.down.circle.fill")
+                        .font(.system(size: 11.5, weight: .semibold))
                 }
-            } label: {
-                Label("Скачать обновления", systemImage: "arrow.down.circle")
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else {
+                Button {
+                    store.updater.checkForUpdates(userInitiated: true)
+                } label: {
+                    Label(
+                        store.updater.state == .checking ? "Проверяем..." : "Проверить обновления",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
                     .font(.system(size: 11.5))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(store.updater.state.isBusy)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
 
             Button {
                 if let url = URL(string: "https://github.com/temakubik/foldie") {

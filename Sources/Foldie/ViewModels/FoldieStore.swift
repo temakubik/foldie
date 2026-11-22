@@ -31,6 +31,7 @@ final class FoldieStore: ObservableObject {
     let discovery: MenuBarDiscoveryService
     let activator: MenuBarActivationService
     let sounds: SoundFeedbackService
+    let updater: AppUpdaterService
     private let persistence: PersistenceStore
 
     var onRequestClosePanel: (() -> Void)?
@@ -69,6 +70,7 @@ final class FoldieStore: ObservableObject {
             hiderService: self.hider
         )
         self.sounds = SoundFeedbackService()
+        self.updater = AppUpdaterService()
         self.sounds.isEnabled = self.config.preferences.enableSounds
 
         // Forward nested observable changes so SwiftUI updates live
@@ -76,6 +78,9 @@ final class FoldieStore: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
         hider.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        updater.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
@@ -90,6 +95,7 @@ final class FoldieStore: ObservableObject {
             hideIcons: shouldHideInitially
         )
         refreshItems(captureThumbnails: true)
+        updater.startAutoCheck(enabled: config.preferences.autoCheckUpdates)
 
         // Periodically scan for newly launched or quit menu bar apps
         refreshTimer?.invalidate()
@@ -367,6 +373,12 @@ final class FoldieStore: ObservableObject {
         if enabled {
             sounds.playPop()
         }
+        saveConfig()
+    }
+
+    func setAutoCheckUpdates(_ enabled: Bool) {
+        config.preferences.autoCheckUpdates = enabled
+        updater.startAutoCheck(enabled: enabled)
         saveConfig()
     }
 

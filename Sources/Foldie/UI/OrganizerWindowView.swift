@@ -59,6 +59,12 @@ struct OrganizerWindowView: View {
                         .padding(.bottom, 10)
                 }
 
+                if shouldShowUpdateBanner {
+                    updateAvailableBanner
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+                }
+
                 Divider().opacity(0.45)
 
                 Group {
@@ -100,6 +106,71 @@ struct OrganizerWindowView: View {
         .onAppear {
             store.refreshItems(captureThumbnails: false)
         }
+    }
+
+    private var shouldShowUpdateBanner: Bool {
+        switch store.updater.state {
+        case .available, .downloading, .installing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var updateAvailableBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                switch store.updater.state {
+                case .available(let release):
+                    Text("Доступно обновление Foldie v\(release.version)")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("Нажмите «Обновить» — приложение само скачает новую версию, установит и перезапустится.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                case .downloading(let version, let progress):
+                    Text("Загружаем Foldie v\(version)... \(Int(progress * 100))%")
+                        .font(.system(size: 12, weight: .semibold))
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                case .installing(let version):
+                    Text("Устанавливаем Foldie v\(version) и перезапускаем...")
+                        .font(.system(size: 12, weight: .semibold))
+                default:
+                    EmptyView()
+                }
+            }
+
+            Spacer()
+
+            if case .available = store.updater.state {
+                Button("Что нового") {
+                    store.updater.openReleasePage()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Обновить и перезапустить") {
+                    store.updater.installAvailableUpdate()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color.accentColor.opacity(0.11))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.32), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Top Bar
