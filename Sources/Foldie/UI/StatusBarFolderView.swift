@@ -31,13 +31,13 @@ final class StatusBarFolderView: NSView {
     private var currentIconStyle: IconStyle = .color
     private var currentCount: Int = 0
 
-    static let mainFixedWidth: CGFloat = 122
-    static let pinnedFixedWidth: CGFloat = 50
+    static let mainFixedWidth: CGFloat = 128
+    static let pinnedFixedWidth: CGFloat = 54
 
     init(style: LayoutStyle) {
         self.layoutStyle = style
         let width: CGFloat = style == .mainFixedWidth ? Self.mainFixedWidth : Self.pinnedFixedWidth
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 22))
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 26))
         setupViews()
     }
 
@@ -73,7 +73,7 @@ final class StatusBarFolderView: NSView {
             textClipView.layer?.masksToBounds = true
             outerCapsule.addSubview(textClipView)
 
-            titleLabel.font = NSFont.systemFont(ofSize: 11.0, weight: .medium)
+            titleLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
             titleLabel.textColor = .labelColor
             titleLabel.lineBreakMode = .byClipping
             titleLabel.maximumNumberOfLines = 1
@@ -85,11 +85,11 @@ final class StatusBarFolderView: NSView {
         }
 
         badgeContainer.wantsLayer = true
-        badgeContainer.layer?.cornerRadius = 6.5
+        badgeContainer.layer?.cornerRadius = 8.0
         badgeContainer.layer?.masksToBounds = true
         outerCapsule.addSubview(badgeContainer)
 
-        badgeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9.0, weight: .bold)
+        badgeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .bold)
         badgeLabel.textColor = .labelColor
         badgeLabel.alignment = .center
         badgeLabel.maximumNumberOfLines = 1
@@ -117,7 +117,7 @@ final class StatusBarFolderView: NSView {
         currentCount = count
 
         // 1. Configure icon (colored palette or native monochrome template)
-        let baseConfig = NSImage.SymbolConfiguration(pointSize: 12.0, weight: .semibold)
+        let baseConfig = NSImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
         if iconStyle == .color, let accentColor {
             let paletteConfig = baseConfig.applying(.init(paletteColors: [accentColor]))
             let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)?
@@ -183,32 +183,34 @@ final class StatusBarFolderView: NSView {
     }
 
     private func layoutSubviewsFrames() {
-        let capsuleH: CGFloat = min(19, max(16, bounds.height - 3))
+        // Generous capsule height so it fills the macOS menu bar comfortably without looking flattened
+        let capsuleH: CGFloat = min(26, max(21, bounds.height - 2))
         let capsuleY: CGFloat = floor((bounds.height - capsuleH) / 2)
-        outerCapsule.frame = NSRect(x: 1, y: capsuleY, width: max(20, bounds.width - 2), height: capsuleH)
+        outerCapsule.frame = NSRect(x: 1, y: capsuleY, width: max(22, bounds.width - 2), height: capsuleH)
         outerCapsule.layer?.cornerRadius = capsuleH / 2.0
 
         let cw = outerCapsule.bounds.width
         let ch = outerCapsule.bounds.height
-        let iconSize: CGFloat = 14
+        let iconSize: CGFloat = 15
         let iconY = floor((ch - iconSize) / 2)
 
         switch layoutStyle {
         case .mainFixedWidth:
-            // Inside 120pt capsule: [ 7px | 14px icon | 5px | ~62px title clip | 5px | 21px count pill | 4px ]
-            iconView.frame = NSRect(x: 7, y: iconY, width: iconSize, height: iconSize)
+            // Inside 126pt capsule: [ 8px | 15px icon | 5px | ~64px title clip | 5px | 23px count pill | 5px ]
+            iconView.frame = NSRect(x: 8, y: iconY, width: iconSize, height: iconSize)
 
-            let badgeH: CGFloat = 13
-            let badgeW: CGFloat = badgeLabel.stringValue.count >= 3 ? 25 : 21
-            let badgeX = cw - badgeW - 4
+            let badgeH: CGFloat = 16
+            let badgeW: CGFloat = badgeLabel.stringValue.count >= 3 ? 27 : 23
+            let badgeX = cw - badgeW - 5
             let badgeY = floor((ch - badgeH) / 2)
             badgeContainer.frame = NSRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
-            badgeLabel.frame = NSRect(x: 0, y: 0.5, width: badgeW, height: badgeH - 1)
+            badgeContainer.layer?.cornerRadius = badgeH / 2.0
+            badgeLabel.frame = NSRect(x: 0, y: 1.5, width: badgeW, height: badgeH - 2)
 
-            let titleX: CGFloat = 26
-            let rightEdge = badgeContainer.isHidden ? (cw - 7) : (badgeX - 5)
+            let titleX: CGFloat = 28
+            let rightEdge = badgeContainer.isHidden ? (cw - 8) : (badgeX - 5)
             let clipW = max(16, rightEdge - titleX)
-            textClipView.frame = NSRect(x: titleX, y: floor((ch - 15) / 2), width: clipW, height: 15)
+            textClipView.frame = NSRect(x: titleX, y: floor((ch - 17) / 2), width: clipW, height: 17)
 
             titleLabel.sizeToFit()
             let labelW = ceil(titleLabel.frame.width)
@@ -223,16 +225,17 @@ final class StatusBarFolderView: NSView {
             titleLabel.frame = NSRect(x: marqueeOffset, y: labelY, width: labelW, height: labelH)
 
         case .pinnedCompact:
-            // Inside 48pt capsule: [ 6px | 14px icon | 4px | 20px count pill | 4px ]
-            let badgeH: CGFloat = 13
-            let badgeW: CGFloat = badgeLabel.stringValue.count >= 3 ? 23 : 20
+            // Inside 52pt capsule: [ 7px | 15px icon | 4px | 21px count pill | 5px ]
+            let badgeH: CGFloat = 16
+            let badgeW: CGFloat = badgeLabel.stringValue.count >= 3 ? 25 : 21
             if badgeContainer.isHidden {
                 iconView.frame = NSRect(x: floor((cw - iconSize) / 2), y: iconY, width: iconSize, height: iconSize)
             } else {
-                iconView.frame = NSRect(x: 6, y: iconY, width: iconSize, height: iconSize)
+                iconView.frame = NSRect(x: 7, y: iconY, width: iconSize, height: iconSize)
                 let badgeY = floor((ch - badgeH) / 2)
-                badgeContainer.frame = NSRect(x: cw - badgeW - 4, y: badgeY, width: badgeW, height: badgeH)
-                badgeLabel.frame = NSRect(x: 0, y: 0.5, width: badgeW, height: badgeH - 1)
+                badgeContainer.frame = NSRect(x: cw - badgeW - 5, y: badgeY, width: badgeW, height: badgeH)
+                badgeContainer.layer?.cornerRadius = badgeH / 2.0
+                badgeLabel.frame = NSRect(x: 0, y: 1.5, width: badgeW, height: badgeH - 2)
             }
         }
     }
