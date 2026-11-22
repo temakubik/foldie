@@ -32,8 +32,8 @@ final class OrganizerWindowController: NSObject, NSWindowDelegate {
         window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.setContentSize(NSSize(width: 740, height: 540))
-        window.minSize = NSSize(width: 680, height: 480)
+        window.setContentSize(NSSize(width: 790, height: 560))
+        window.minSize = NSSize(width: 760, height: 500)
         window.center()
 
         self.window = window

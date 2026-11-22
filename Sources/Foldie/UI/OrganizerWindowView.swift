@@ -5,6 +5,7 @@ enum OrganizerTab: String, CaseIterable, Identifiable {
     case organize = "organize"
     case appearance = "appearance"
     case permissions = "permissions"
+    case help = "help"
 
     var id: String { rawValue }
 
@@ -13,6 +14,7 @@ enum OrganizerTab: String, CaseIterable, Identifiable {
         case .organize: return "Сортировка и папки"
         case .appearance: return "Поведение и вид"
         case .permissions: return "Разрешения"
+        case .help: return "Справка"
         }
     }
 
@@ -21,6 +23,7 @@ enum OrganizerTab: String, CaseIterable, Identifiable {
         case .organize: return "folder.fill"
         case .appearance: return "slider.horizontal.3"
         case .permissions: return "checkmark.shield.fill"
+        case .help: return "questionmark.circle.fill"
         }
     }
 }
@@ -66,6 +69,12 @@ struct OrganizerWindowView: View {
                         appearanceTabContent
                     case .permissions:
                         permissionsTabContent
+                    case .help:
+                        HelpGuideView(store: store) {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                selectedTab = .permissions
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,7 +96,7 @@ struct OrganizerWindowView: View {
                 )
             }
         }
-        .frame(minWidth: 700, minHeight: 520)
+        .frame(minWidth: 760, minHeight: 520)
         .onAppear {
             store.refreshItems(captureThumbnails: false)
         }
@@ -144,7 +153,7 @@ struct OrganizerWindowView: View {
                         }
                         .foregroundStyle(isSelected ? .primary : .secondary)
                         .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
