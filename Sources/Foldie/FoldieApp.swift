@@ -71,6 +71,19 @@ final class FoldieAppDelegate: NSObject, NSApplicationDelegate {
             store?.cycleSwipedFolder(step: step)
         }
 
+        store.hider.onPinnedFolderLeftClick = { [weak self] folderID in
+            guard let self, let store = self.store, let panel = self.panelController else { return }
+            panel.togglePinnedFolder(folderID, anchorRect: store.hider.screenFrame(forPinnedFolderID: folderID))
+        }
+
+        store.hider.onPinnedFolderHoverChanged = { [weak self] folderID, hovering in
+            self?.panelController?.handlePinnedFolderHover(folderID, hovering: hovering)
+        }
+
+        store.hider.onPinnedFolderRightClick = { [weak self] _, button in
+            self?.showContextMenu(from: button)
+        }
+
         store.hider.onRightClick = { [weak self] button in
             self?.showContextMenu(from: button)
         }

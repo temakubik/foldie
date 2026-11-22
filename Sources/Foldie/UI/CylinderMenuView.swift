@@ -96,6 +96,12 @@ struct CylinderMenuView: View {
                 lastDetentIndex = 0
             }
         }
+        .onChange(of: store.activePopupFolderID) { _, _ in
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
+                scrollOffset = 0
+                lastDetentIndex = 0
+            }
+        }
     }
 
     // MARK: - Compact Top-Anchored 3D Drum Stage

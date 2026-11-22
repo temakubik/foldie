@@ -110,6 +110,19 @@ struct FolderEditorOverlay: View {
                     }
                 }
 
+                Toggle(isOn: $state.showInMenuBar) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Отдельная иконка в строке меню")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Закрепляет эту папку с выбранной иконкой и цветом прямо в верхней панели")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .padding(.top, 2)
+
                 HStack {
                     Spacer()
                     Button("Отмена") {

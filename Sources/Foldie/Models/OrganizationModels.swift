@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -73,11 +74,49 @@ struct FoldieFolder: Identifiable, Codable, Hashable, Sendable {
     var name: String
     var symbolName: String = "folder.fill"
     var accentHex: String = "#0A84FF"
-    var isExpanded: Bool = true
+    var isExpanded: Bool = false
+    var showInMenuBar: Bool = false
     var children: [FoldieNode] = []
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, symbolName, accentHex, isExpanded, showInMenuBar, children
+    }
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        symbolName: String = "folder.fill",
+        accentHex: String = "#0A84FF",
+        isExpanded: Bool = false,
+        showInMenuBar: Bool = false,
+        children: [FoldieNode] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.symbolName = symbolName
+        self.accentHex = accentHex
+        self.isExpanded = isExpanded
+        self.showInMenuBar = showInMenuBar
+        self.children = children
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        symbolName = try c.decodeIfPresent(String.self, forKey: .symbolName) ?? "folder.fill"
+        accentHex = try c.decodeIfPresent(String.self, forKey: .accentHex) ?? "#0A84FF"
+        isExpanded = try c.decodeIfPresent(Bool.self, forKey: .isExpanded) ?? false
+        showInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .showInMenuBar) ?? false
+        children = try c.decodeIfPresent([FoldieNode].self, forKey: .children) ?? []
+    }
 
     var accentColor: Color {
         Color(hex: accentHex) ?? .accentColor
+    }
+
+    var nsAccentColor: NSColor {
+        NSColor(hex: accentHex) ?? .controlAccentColor
     }
 }
 
@@ -212,6 +251,22 @@ extension Color {
         let g = Double((value & 0x00FF00) >> 8) / 255.0
         let b = Double(value & 0x0000FF) / 255.0
         self.init(.sRGB, red: r, green: g, blue: b, opacity: 1.0)
+    }
+}
+
+extension NSColor {
+    convenience init?(hex: String) {
+        var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("#") {
+            cleaned.removeFirst()
+        }
+        guard cleaned.count == 6, let value = UInt64(cleaned, radix: 16) else {
+            return nil
+        }
+        let r = CGFloat((value & 0xFF0000) >> 16) / 255.0
+        let g = CGFloat((value & 0x00FF00) >> 8) / 255.0
+        let b = CGFloat(value & 0x0000FF) / 255.0
+        self.init(srgbRed: r, green: g, blue: b, alpha: 1.0)
     }
 }
 

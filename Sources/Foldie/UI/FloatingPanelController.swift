@@ -12,6 +12,7 @@ final class FloatingPanelController: NSObject {
     private var globalMouseDownMonitor: Any?
     private var globalMouseMovedMonitor: Any?
     private var globalScrollMonitor: Any?
+    private var localScrollMonitor: Any?
     private var localMouseMovedMonitor: Any?
     private var localKeyMonitor: Any?
 
@@ -19,6 +20,8 @@ final class FloatingPanelController: NSObject {
     private var hoverCloseTask: Task<Void, Never>?
     private var openedByHover: Bool = false
     private var isPointerOverStatusButton: Bool = false
+    private var hoveredPinnedFolderID: UUID? = nil
+    private var activeAnchorFolderID: UUID? = nil
 
     private let store: FoldieStore
 
@@ -37,21 +40,51 @@ final class FloatingPanelController: NSObject {
         panel?.isVisible ?? false
     }
 
-    /// Called when the user explicitly clicks Foldie's menu bar icon.
+    /// Called when the user explicitly clicks Foldie's main menu bar icon.
     func toggle(anchorRect: CGRect?) {
         hoverOpenTask?.cancel()
         hoverCloseTask?.cancel()
-        if isVisible && !openedByHover {
+        if isVisible && !openedByHover && activeAnchorFolderID == nil {
             close()
         } else {
             openedByHover = false
+            activeAnchorFolderID = nil
+            store.setActivePopupFolder(store.swipedFolderID)
             open(anchorRect: anchorRect)
         }
     }
 
-    /// Called by NSTrackingArea on the status item button (supplemented by global mouseMoved).
+    /// Called when the user explicitly clicks one of the pinned folder status bar icons.
+    func togglePinnedFolder(_ folderID: UUID, anchorRect: CGRect?) {
+        hoverOpenTask?.cancel()
+        hoverCloseTask?.cancel()
+        if isVisible && !openedByHover && activeAnchorFolderID == folderID {
+            close()
+        } else {
+            openedByHover = false
+            activeAnchorFolderID = folderID
+            store.setActivePopupFolder(folderID)
+            open(anchorRect: anchorRect)
+        }
+    }
+
+    /// Called by NSTrackingArea on the main Foldie status button.
     func handleStatusButtonHover(_ hovering: Bool) {
         isPointerOverStatusButton = hovering
+        if hovering {
+            hoveredPinnedFolderID = nil
+        }
+        evaluateHoverState(mouseLocation: NSEvent.mouseLocation)
+    }
+
+    /// Called by NSTrackingArea on any pinned folder status bar icon.
+    func handlePinnedFolderHover(_ folderID: UUID, hovering: Bool) {
+        if hovering {
+            hoveredPinnedFolderID = folderID
+            isPointerOverStatusButton = false
+        } else if hoveredPinnedFolderID == folderID {
+            hoveredPinnedFolderID = nil
+        }
         evaluateHoverState(mouseLocation: NSEvent.mouseLocation)
     }
 
@@ -121,39 +154,104 @@ final class FloatingPanelController: NSObject {
             }
             return event
         }
-        // Horizontal two-finger swipe directly over Foldie's menu bar icon switches folders!
+        // Horizontal two-finger swipe directly over Foldie's menu bar area OR over the floating menu switches main folders!
         globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                let mouse = NSEvent.mouseLocation
-                let overIcon = self.isPointerOverStatusButton
-                    || (self.store.hider.folderButtonScreenFrame?.insetBy(dx: -16, dy: -8).contains(mouse) ?? false)
-                let overPanel = self.isVisible && (self.panel?.frame.contains(mouse) ?? false)
-                if (overIcon || overPanel) && abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
-                    self.store.hider.processHorizontalScrollEvent(event)
-                }
+                self?.handlePotentialHorizontalSwipe(event)
             }
+        }
+        localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15,
+               self.isPointerInSwipeArea(mouse: NSEvent.mouseLocation) {
+                self.store.hider.processHorizontalScrollEvent(event)
+                return nil
+            }
+            return event
         }
     }
 
+    private func isPointerInSwipeArea(mouse: NSPoint) -> Bool {
+        if isPointerOverStatusButton { return true }
+        if let rect = store.hider.folderButtonScreenFrame, rect.insetBy(dx: -24, dy: -10).contains(mouse) {
+            return true
+        }
+        if isVisible, let panelFrame = panel?.frame, panelFrame.insetBy(dx: -8, dy: -8).contains(mouse) {
+            return true
+        }
+        // Fallback right-side menu bar strip (reliable on macOS 26 even before Screen Recording is granted)
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main {
+            if mouse.y >= screen.visibleFrame.maxY - 4 && mouse.x >= screen.frame.midX {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func handlePotentialHorizontalSwipe(_ event: NSEvent) {
+        guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15 else { return }
+        if isPointerInSwipeArea(mouse: NSEvent.mouseLocation) {
+            store.hider.processHorizontalScrollEvent(event)
+        }
+    }
+
+    private func activeAnchorRect() -> CGRect? {
+        if let pinnedID = activeAnchorFolderID {
+            return store.hider.screenFrame(forPinnedFolderID: pinnedID)
+        }
+        return store.hider.folderButtonScreenFrame
+    }
+
     private func evaluateHoverState(mouseLocation: NSPoint) {
-        let buttonRect = store.hider.folderButtonScreenFrame
-        let overButton = isPointerOverStatusButton
-            || (buttonRect?.insetBy(dx: -3, dy: -4).contains(mouseLocation) ?? false)
+        let hoveredPinned = hoveredPinnedFolderID ?? store.hider.pinnedFolderID(at: mouseLocation)
+        let mainRect = store.hider.folderButtonScreenFrame
+        let overMainButton = isPointerOverStatusButton
+            || (mainRect?.insetBy(dx: -3, dy: -4).contains(mouseLocation) ?? false)
+
+        // If hovering directly over a different pinned folder or main icon while already open -> switch smoothly!
+        if isVisible {
+            if let pinnedID = hoveredPinned, activeAnchorFolderID != pinnedID {
+                hoverCloseTask?.cancel()
+                hoverCloseTask = nil
+                activeAnchorFolderID = pinnedID
+                store.setActivePopupFolder(pinnedID)
+                open(anchorRect: store.hider.screenFrame(forPinnedFolderID: pinnedID), fromHover: openedByHover)
+                return
+            }
+            if overMainButton && hoveredPinned == nil && activeAnchorFolderID != nil {
+                hoverCloseTask?.cancel()
+                hoverCloseTask = nil
+                activeAnchorFolderID = nil
+                store.setActivePopupFolder(store.swipedFolderID)
+                open(anchorRect: mainRect, fromHover: openedByHover)
+                return
+            }
+        }
 
         if !isVisible {
-            if overButton {
+            if hoveredPinned != nil || overMainButton {
+                let targetPinned = hoveredPinned
                 guard hoverOpenTask == nil else { return }
                 hoverOpenTask = Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    try? await Task.sleep(nanoseconds: 110_000_000)
                     guard !Task.isCancelled, let self else { return }
                     self.hoverOpenTask = nil
                     let currentMouse = NSEvent.mouseLocation
-                    let stillOver = self.isPointerOverStatusButton
-                        || (self.store.hider.folderButtonScreenFrame?.insetBy(dx: -4, dy: -4).contains(currentMouse) ?? false)
-                    if stillOver && !self.isVisible {
+                    if let pinnedID = self.hoveredPinnedFolderID ?? self.store.hider.pinnedFolderID(at: currentMouse) ?? targetPinned,
+                       (self.hoveredPinnedFolderID == pinnedID || (self.store.hider.screenFrame(forPinnedFolderID: pinnedID)?.insetBy(dx: -4, dy: -4).contains(currentMouse) ?? false)) {
                         self.openedByHover = true
-                        self.open(anchorRect: self.store.hider.folderButtonScreenFrame, fromHover: true)
+                        self.activeAnchorFolderID = pinnedID
+                        self.store.setActivePopupFolder(pinnedID)
+                        self.open(anchorRect: self.store.hider.screenFrame(forPinnedFolderID: pinnedID), fromHover: true)
+                    } else {
+                        let stillMain = self.isPointerOverStatusButton
+                            || (self.store.hider.folderButtonScreenFrame?.insetBy(dx: -4, dy: -4).contains(currentMouse) ?? false)
+                        if stillMain && !self.isVisible {
+                            self.openedByHover = true
+                            self.activeAnchorFolderID = nil
+                            self.store.setActivePopupFolder(self.store.swipedFolderID)
+                            self.open(anchorRect: self.store.hider.folderButtonScreenFrame, fromHover: true)
+                        }
                     }
                 }
             } else {
@@ -163,17 +261,16 @@ final class FloatingPanelController: NSObject {
             return
         }
 
-        // Panel is visible: if opened via hover, smoothly close once cursor leaves icon + panel + bridge zone
+        // Panel is visible: if opened via hover, smoothly close once cursor leaves active anchor + panel + bridge zone
         guard openedByHover else { return }
 
-        // Keep open while user is inside an editor overlay
         if store.folderEditorState != nil || store.dividerEditorState != nil {
             hoverCloseTask?.cancel()
             hoverCloseTask = nil
             return
         }
 
-        let inSafeZone = isMouseInHoverSafeZone(mouseLocation: mouseLocation, buttonRect: buttonRect)
+        let inSafeZone = isMouseInHoverSafeZone(mouseLocation: mouseLocation, buttonRect: activeAnchorRect())
         if inSafeZone {
             hoverCloseTask?.cancel()
             hoverCloseTask = nil
@@ -185,7 +282,7 @@ final class FloatingPanelController: NSObject {
                 let latestMouse = NSEvent.mouseLocation
                 if self.openedByHover && !self.isMouseInHoverSafeZone(
                     mouseLocation: latestMouse,
-                    buttonRect: self.store.hider.folderButtonScreenFrame
+                    buttonRect: self.activeAnchorRect()
                 ) {
                     self.close()
                 }

@@ -12,9 +12,9 @@
 macOS menu bars get crowded quickly — especially on MacBooks with a notch. **Foldie** places a single sleek folder icon with a live app counter in your menu bar and hides the rest of your status items inside it.
 
 ### Key Features
-- **One Folder + Live Count Badge**: Keeps your menu bar clean with a single Foldie icon showing how many apps are inside.
-- **Swipe Between Folders in the Menu Bar**: Two-finger horizontal swipe left/right right over Foldie's menu bar icon switches between all apps and your custom folders with haptic feedback.
-- **Hover or Click to Open (Frameless UI)**: Hovering over Foldie reveals compact floating frosted-glass items directly underneath the icon — no bulky window chrome.
+- **One Folder or Multiple Pinned Folder Icons in the Menu Bar**: Use a single Foldie folder icon (and **swipe left/right** with two fingers to cycle folders), OR pin any folder (e.g. *VPN*, *Utilities*, *AI*) as its **own separate menu bar icon** with custom SF Symbol, color, and live count badge.
+- **One-Click Smart Auto-Sort**: Automatically scans all menu bar apps and sorts them into clean top-level category folders (*AI & Dev*, *VPN & Network*, *Communication*, *Productivity*, *Utilities*, *System*).
+- **Hover or Click to Open (Frameless UI)**: Hovering over Foldie (or any pinned folder icon) reveals compact floating frosted-glass items directly underneath — no bulky window chrome.
 - **Two Display Modes**:
   - **Floating List**: Compact nested folders, custom dividers, and instant app triggering.
   - **3D Cylinder (Drum)**: Tactile 3D rotating wheel with perspective, trackpad/scroll-wheel inertia, keyboard navigation (`↑`/`↓`/`⏎`/`←`), and haptic detents.
@@ -52,9 +52,9 @@ open Foldie.app
 Строка меню macOS быстро переполняется иконками — особенно на MacBook с вырезом («чёлкой»). **Foldie** добавляет в строку меню одну компактную папку со счётчиком приложений и прячет все остальные иконки внутрь.
 
 ### Основные возможности
-- **Единая папка со счётчиком приложений**: в строке меню остаётся одна аккуратная иконка Foldie с количеством собранных приложений.
-- **Свайп влево/вправо прямо по иконке в строке меню**: проводите двумя пальцами по трекпаду над иконкой Foldie, чтобы мгновенно переключаться между «Всеми приложениями» и вашими папками с тактильной отдачей.
-- **Открытие по наведению без лишней оболочки**: наведите курсор на папку Foldie — прямо под ней парят компактные пункты без рамки и лишних кнопок.
+- **Одна папка со свайпом или несколько отдельных иконок папок в строке меню**: используйте одну иконку Foldie (свайп двумя пальцами влево/вправо переключает основные папки) **или закрепите любые папки** (например, *Утилиты*, *VPN*, *ИИ*) отдельными иконками с собственным цветом, значком и счётчиком прямо в строке меню.
+- **Автосортировка одной кнопкой**: сканирует приложения из строки меню и автоматически раскладывает их по основным папкам-категориям (*ИИ и разработка*, *Сеть и VPN*, *Связь*, *Продуктивность*, *Утилиты*, *Система*).
+- **Открытие по наведению без лишней оболочки**: наведите курсор на иконку Foldie или на любую закреплённую папку — прямо под ней парят компактные пункты без рамки и лишних кнопок.
 - **Два режима отображения**:
   - **Список с папками и разделителями**: компактные сворачиваемые папки, подписанные разделители и быстрый клик по скрытым иконкам.
   - **3D-Цилиндр (барабан)**: интерактивный вращающийся 3D-барабан с перспективой, прокруткой трекпадом/колёсиком, навигацией клавишами (`↑`/`↓`/`⏎`/`←`) и тактильной отдачей.

@@ -87,9 +87,20 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     var onRightClick: ((NSStatusBarButton) -> Void)?
     var onHoverChanged: ((Bool) -> Void)?
     var onHorizontalSwipe: ((Int) -> Void)?
+
+    // Multi-folder pinned status items (when user pins specific folders to their own menu bar icons)
+    var onPinnedFolderLeftClick: ((UUID) -> Void)?
+    var onPinnedFolderRightClick: ((UUID, NSStatusBarButton) -> Void)?
+    var onPinnedFolderHoverChanged: ((UUID, Bool) -> Void)?
+
+    private var pinnedFolderItems: [UUID: NSStatusItem] = [:]
+    private var pinnedButtonToFolderID: [ObjectIdentifier: UUID] = [:]
+    private var lastKnownPinnedFrames: [UUID: CGRect] = [:]
+
     private weak var activeHoverView: StatusButtonHoverView?
     private var horizontalSwipeAccumulator: CGFloat = 0
     private var lastHorizontalSwipeTime: Date = .distantPast
+    private var lastKnownFolderScreenFrame: CGRect?
 
     private var folderStatusItem: NSStatusItem? {
         folderIsSlotA ? slotA : slotB
@@ -206,13 +217,18 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     }
 
     func processHorizontalScrollEvent(_ event: NSEvent) {
-        guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
+        // Ignore inertial momentum so one two-finger flick advances exactly one folder cleanly
+        guard event.momentumPhase == [] else { return }
+        guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.15 else { return }
+
         let now = Date()
-        if now.timeIntervalSince(lastHorizontalSwipeTime) < 0.28 {
+        if now.timeIntervalSince(lastHorizontalSwipeTime) < 0.24 {
+            horizontalSwipeAccumulator = 0
             return
         }
+
         horizontalSwipeAccumulator += event.scrollingDeltaX
-        let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 24.0 : 1.0
+        let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 18.0 : 0.8
         if abs(horizontalSwipeAccumulator) >= threshold {
             let step = horizontalSwipeAccumulator < 0 ? 1 : -1
             horizontalSwipeAccumulator = 0
@@ -272,6 +288,9 @@ final class MenuBarHiderService: NSObject, ObservableObject {
                 let hoverView = StatusButtonHoverView(frame: button.bounds)
                 hoverView.autoresizingMask = [.width, .height]
                 hoverView.onHoverChanged = { [weak self] hovering in
+                    if hovering {
+                        self?.captureAnchorFromCurrentPointer()
+                    }
                     self?.onHoverChanged?(hovering)
                 }
                 hoverView.onScrollWheel = { [weak self] event in
@@ -589,10 +608,177 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         return false
     }
 
+    /// Synchronizes dedicated menu bar status items for every folder with `showInMenuBar == true`.
+    func syncPinnedFolderItems(
+        folders: [FoldieFolder],
+        counts: [UUID: Int],
+        iconStyle: IconStyle
+    ) {
+        let pinnedFolders = folders.filter { $0.showInMenuBar }
+        let wantedIDs = Set(pinnedFolders.map(\.id))
+
+        // Remove status items for folders that were unpinned or deleted
+        for (id, item) in pinnedFolderItems where !wantedIDs.contains(id) {
+            if let btn = item.button {
+                pinnedButtonToFolderID.removeValue(forKey: ObjectIdentifier(btn))
+            }
+            NSStatusBar.system.removeStatusItem(item)
+            pinnedFolderItems.removeValue(forKey: id)
+            lastKnownPinnedFrames.removeValue(forKey: id)
+        }
+
+        // Create or update each pinned folder status item
+        let defaults = UserDefaults.standard
+        for (idx, folder) in pinnedFolders.enumerated() {
+            let autosave = "com.foldie.app.folder.\(folder.id.uuidString)"
+            let statusItem: NSStatusItem
+            if let existing = pinnedFolderItems[folder.id] {
+                statusItem = existing
+            } else {
+                let prefKey = "NSStatusItem Preferred Position \(autosave)"
+                if defaults.object(forKey: prefKey) == nil {
+                    // Place pinned folders cleanly on the right side next to Foldie (right of hider spacer!)
+                    defaults.set(max(120.0, 210.0 - Double(idx + 1) * 32.0), forKey: prefKey)
+                    defaults.synchronize()
+                }
+                let created = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+                created.autosaveName = autosave
+                created.isVisible = true
+                pinnedFolderItems[folder.id] = created
+                statusItem = created
+            }
+
+            statusItem.isVisible = true
+            statusItem.length = NSStatusItem.variableLength
+
+            if let button = statusItem.button {
+                pinnedButtonToFolderID[ObjectIdentifier(button)] = folder.id
+                button.isEnabled = true
+                button.target = self
+                button.action = #selector(handlePinnedFolderClick(_:))
+                button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+                // Render custom SF Symbol with folder's custom color (or crisp monochrome template)
+                let baseConfig = NSImage.SymbolConfiguration(pointSize: 13.5, weight: .semibold)
+                let image: NSImage?
+                if iconStyle == .color {
+                    let paletteConfig = baseConfig.applying(.init(paletteColors: [folder.nsAccentColor]))
+                    let colored = NSImage(systemSymbolName: folder.symbolName, accessibilityDescription: folder.name)?
+                        .withSymbolConfiguration(paletteConfig)
+                    colored?.isTemplate = false
+                    image = colored
+                } else {
+                    let mono = NSImage(systemSymbolName: folder.symbolName, accessibilityDescription: folder.name)?
+                        .withSymbolConfiguration(baseConfig)
+                    mono?.isTemplate = true
+                    image = mono
+                }
+
+                let count = counts[folder.id] ?? 0
+                button.image = image
+                button.imagePosition = count > 0 ? .imageLeading : .imageOnly
+
+                if count > 0 {
+                    let attrs: [NSAttributedString.Key: Any] = [
+                        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
+                        .baselineOffset: 0.5
+                    ]
+                    button.attributedTitle = NSAttributedString(string: " \(count)", attributes: attrs)
+                } else {
+                    button.attributedTitle = NSAttributedString(string: "")
+                    button.title = ""
+                }
+                button.toolTip = "\(folder.name) — приложений: \(count)"
+
+                // Ensure hover tracking view is attached
+                let hasHover = button.subviews.contains { $0 is StatusButtonHoverView }
+                if !hasHover {
+                    let folderID = folder.id
+                    let hoverView = StatusButtonHoverView(frame: button.bounds)
+                    hoverView.autoresizingMask = [.width, .height]
+                    hoverView.onHoverChanged = { [weak self] hovering in
+                        if hovering {
+                            self?.capturePinnedAnchorFromPointer(folderID: folderID)
+                        }
+                        self?.onPinnedFolderHoverChanged?(folderID, hovering)
+                    }
+                    button.addSubview(hoverView)
+                }
+            }
+        }
+    }
+
+    func screenFrame(forPinnedFolderID folderID: UUID) -> CGRect? {
+        let autosave = "com.foldie.app.folder.\(folderID.uuidString)"
+        if let cgFrame = liveFrame(forAutosaveName: autosave, item: pinnedFolderItems[folderID]),
+           cgFrame.origin.x > 10, cgFrame.width >= 10 {
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? 900
+            let rect = CGRect(
+                x: cgFrame.origin.x,
+                y: primaryHeight - cgFrame.maxY,
+                width: cgFrame.width,
+                height: cgFrame.height
+            )
+            lastKnownPinnedFrames[folderID] = rect
+            return rect
+        }
+        if let button = pinnedFolderItems[folderID]?.button,
+           let window = button.window {
+            let frameInWindow = button.convert(button.bounds, to: nil)
+            let screenRect = window.convertToScreen(frameInWindow)
+            if screenRect.origin.x > 10 && screenRect.origin.y > 200 {
+                lastKnownPinnedFrames[folderID] = screenRect
+                return screenRect
+            }
+        }
+        return lastKnownPinnedFrames[folderID]
+    }
+
+    /// Checks whether a given screen point is currently hovering any pinned folder status item.
+    func pinnedFolderID(at screenPoint: NSPoint) -> UUID? {
+        for folderID in pinnedFolderItems.keys {
+            if let rect = screenFrame(forPinnedFolderID: folderID),
+               rect.insetBy(dx: -3, dy: -4).contains(screenPoint) {
+                return folderID
+            }
+        }
+        return nil
+    }
+
+    private func capturePinnedAnchorFromPointer(folderID: UUID) {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        guard let screen else { return }
+        let menuBarHeight = max(24, screen.frame.maxY - screen.visibleFrame.maxY)
+        if mouse.y >= screen.visibleFrame.maxY - 6 {
+            lastKnownPinnedFrames[folderID] = CGRect(
+                x: mouse.x - 18,
+                y: screen.visibleFrame.maxY,
+                width: 36,
+                height: menuBarHeight
+            )
+        }
+    }
+
+    @objc private func handlePinnedFolderClick(_ sender: NSStatusBarButton) {
+        guard let folderID = pinnedButtonToFolderID[ObjectIdentifier(sender)] else { return }
+        capturePinnedAnchorFromPointer(folderID: folderID)
+        guard let event = NSApp.currentEvent else {
+            onPinnedFolderLeftClick?(folderID)
+            return
+        }
+        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+            onPinnedFolderRightClick?(folderID, sender)
+        } else {
+            onPinnedFolderLeftClick?(folderID)
+        }
+    }
+
     /// Returns CGWindowIDs belonging to Foldie's own status items so discovery filters them out.
     var ownStatusWindowIDs: Set<CGWindowID> {
         var ids = Set<CGWindowID>()
-        for item in [slotA, slotB] {
+        let allItems: [NSStatusItem?] = [slotA, slotB] + Array(pinnedFolderItems.values)
+        for item in allItems {
             if let winNum = item?.button?.window?.windowNumber,
                let cgID = CGWindowID(exactly: winNum),
                cgID > 0 {
@@ -602,23 +788,45 @@ final class MenuBarHiderService: NSObject, ObservableObject {
         return ids
     }
 
+    private func captureAnchorFromCurrentPointer() {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        guard let screen else { return }
+        let menuBarHeight = max(24, screen.frame.maxY - screen.visibleFrame.maxY)
+        if mouse.y >= screen.visibleFrame.maxY - 6 {
+            lastKnownFolderScreenFrame = CGRect(
+                x: mouse.x - 22,
+                y: screen.visibleFrame.maxY,
+                width: 44,
+                height: menuBarHeight
+            )
+        }
+    }
+
     /// Returns the screen frame (AppKit bottom-left coordinates) of the Foldie folder button.
     var folderButtonScreenFrame: CGRect? {
         if let cgFrame = liveFrame(forAutosaveName: folderAutosaveName, item: folderStatusItem),
-           cgFrame.origin.x > 0, cgFrame.width >= 10 {
+           cgFrame.origin.x > 10, cgFrame.width >= 10 {
             let primaryHeight = NSScreen.screens.first?.frame.height ?? 900
-            return CGRect(
+            let rect = CGRect(
                 x: cgFrame.origin.x,
                 y: primaryHeight - cgFrame.maxY,
                 width: cgFrame.width,
                 height: cgFrame.height
             )
+            lastKnownFolderScreenFrame = rect
+            return rect
         }
-        guard let button = folderStatusItem?.button,
-              let window = button.window else { return nil }
-        let frameInWindow = button.convert(button.bounds, to: nil)
-        let screenRect = window.convertToScreen(frameInWindow)
-        return screenRect.origin.x > 0 ? screenRect : nil
+        if let button = folderStatusItem?.button,
+           let window = button.window {
+            let frameInWindow = button.convert(button.bounds, to: nil)
+            let screenRect = window.convertToScreen(frameInWindow)
+            if screenRect.origin.x > 10 && screenRect.origin.y > 200 {
+                lastKnownFolderScreenFrame = screenRect
+                return screenRect
+            }
+        }
+        return lastKnownFolderScreenFrame
     }
 
     /// Returns true if the hider spacer is somehow positioned to the right of the folder icon.
@@ -644,6 +852,7 @@ final class MenuBarHiderService: NSObject, ObservableObject {
     }
 
     @objc private func handleStatusButtonClick(_ sender: NSStatusBarButton) {
+        captureAnchorFromCurrentPointer()
         guard let event = NSApp.currentEvent else {
             onLeftClick?()
             return

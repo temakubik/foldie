@@ -10,8 +10,10 @@ final class FoldieStore: ObservableObject {
     @Published private(set) var liveItemsByKey: [String: MenuBarItem] = [:]
     @Published var searchQuery: String = ""
     @Published var cylinderFolderPath: [UUID] = []
-    /// Active folder selected via horizontal swipe in the menu bar (`nil` = all / root view).
+    /// Active folder selected via horizontal swipe on the main Foldie icon (`nil` = all / root view).
     @Published var swipedFolderID: UUID? = nil
+    /// Folder currently being displayed by the floating popover (either from hovering a pinned folder icon, or from `swipedFolderID`).
+    @Published var activePopupFolderID: UUID? = nil
     @Published var isShowingSettings: Bool = false
     @Published var isRefreshing: Bool = false
     @Published var isAutoCollecting: Bool = false
@@ -44,6 +46,7 @@ final class FoldieStore: ObservableObject {
         var name: String
         var symbolName: String
         var accentHex: String
+        var showInMenuBar: Bool = false
     }
 
     struct DividerEditorState: Identifiable {
@@ -75,6 +78,7 @@ final class FoldieStore: ObservableObject {
     }
 
     func start() {
+        promoteAllFoldersToRoot()
         let shouldHideInitially = config.preferences.hasCompletedOnboarding
             ? config.preferences.hideMenuBarIcons
             : false
@@ -285,13 +289,42 @@ final class FoldieStore: ObservableObject {
     // MARK: - Activation
 
     func activateItem(key: String, rightClick: Bool = false) {
-        guard let item = liveItemsByKey[key] else { return }
-        onRequestClosePanel?()
-        activator.activate(
-            item: item,
-            rightClick: rightClick,
-            rehideMode: config.preferences.autoRehideMode
-        )
+        if let item = liveItemsByKey[key] {
+            onRequestClosePanel?()
+            activator.activate(
+                item: item,
+                rightClick: rightClick,
+                rehideMode: config.preferences.autoRehideMode
+            )
+            return
+        }
+
+        // Fallback for offline apps: launch the application bundle cleanly so the button always works
+        if let appURL = resolveApplicationURL(forItemKey: key) {
+            onRequestClosePanel?()
+            let config = NSWorkspace.OpenConfiguration()
+            config.activates = true
+            NSWorkspace.shared.openApplication(at: appURL, configuration: config)
+        }
+    }
+
+    func resolveApplicationURL(forItemKey key: String) -> URL? {
+        let meta = config.itemMetadata[key]
+        if let path = meta?.bundlePath, FileManager.default.fileExists(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        let candidateBID: String? = meta?.bundleIdentifier
+            ?? (key.hasPrefix("app::") ? String(key.dropFirst("app::".count)).components(separatedBy: "#").first : nil)
+        if let bid = candidateBID, !bid.isEmpty {
+            if bid == "com.figma.agent",
+               let figmaURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.figma.Desktop") {
+                return figmaURL
+            }
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+                return url
+            }
+        }
+        return nil
     }
 
     // MARK: - Preferences
@@ -299,6 +332,7 @@ final class FoldieStore: ObservableObject {
     func setIconStyle(_ style: IconStyle) {
         config.preferences.iconStyle = style
         saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
     }
 
     /// Resolves the real app icon for any item (live OR offline, including Electron apps like Ollama, Notion, Trae).
@@ -367,17 +401,200 @@ final class FoldieStore: ObservableObject {
 
     /// Cycles active folder when swiping left/right on Foldie's menu bar icon (or horizontally in the menu).
     func cycleSwipedFolder(step: Int) {
-        let folders = allFolders()
+        let folders = topLevelFolders()
         guard !folders.isEmpty else { return }
 
         // Slots: [nil (Все), folder1, folder2, ...]
         let slots: [UUID?] = [nil] + folders.map { Optional($0.id) }
         let currentIdx = slots.firstIndex(where: { $0 == swipedFolderID }) ?? 0
         let nextIdx = (currentIdx + step + slots.count) % slots.count
-        swipedFolderID = slots[nextIdx]
-        cylinderFolderPath = swipedFolderID.map { [$0] } ?? []
+        selectSwipedFolder(slots[nextIdx])
+    }
+
+    func selectSwipedFolder(_ folderID: UUID?) {
+        swipedFolderID = folderID
+        activePopupFolderID = folderID
+        cylinderFolderPath = folderID.map { [$0] } ?? []
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         updateStatusBarBadgeForCurrentFolder()
+    }
+
+    func setActivePopupFolder(_ folderID: UUID?) {
+        activePopupFolderID = folderID
+        cylinderFolderPath = folderID.map { [$0] } ?? []
+    }
+
+    func toggleFolderPinnedInMenuBar(id: UUID) {
+        _ = mutateFolder(id: id, in: &config.rootNodes) { folder in
+            folder.showInMenuBar.toggle()
+        }
+        saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
+    }
+
+    func topLevelFolders() -> [FoldieFolder] {
+        config.rootNodes.compactMap { $0.folderValue }
+    }
+
+    /// Reorders top-level main folders (controls left/right swipe sequence in the menu bar).
+    func moveMainFolder(id: UUID, up: Bool) {
+        let folderIndices = config.rootNodes.indices.filter { config.rootNodes[$0].isFolder }
+        guard let posInFolders = folderIndices.firstIndex(where: { config.rootNodes[$0].folderValue?.id == id }) else {
+            return
+        }
+        let targetPos = up ? posInFolders - 1 : posInFolders + 1
+        guard folderIndices.indices.contains(targetPos) else { return }
+        config.rootNodes.swapAt(folderIndices[posInFolders], folderIndices[targetPos])
+        saveConfig()
+    }
+
+    /// Promotes any nested subfolders to top-level main folders so every folder participates in menu bar swiping.
+    func promoteAllFoldersToRoot() {
+        var promoted: [FoldieFolder] = []
+        func extractNested(from children: inout [FoldieNode]) {
+            var remaining: [FoldieNode] = []
+            for child in children {
+                if case .folder(var sub) = child {
+                    extractNested(from: &sub.children)
+                    promoted.append(sub)
+                } else {
+                    remaining.append(child)
+                }
+            }
+            children = remaining
+        }
+        for idx in config.rootNodes.indices {
+            if case .folder(var folder) = config.rootNodes[idx] {
+                extractNested(from: &folder.children)
+                config.rootNodes[idx] = .folder(folder)
+            }
+        }
+        if !promoted.isEmpty {
+            config.rootNodes.insert(contentsOf: promoted.map { .folder($0) }, at: 0)
+            saveConfig()
+        }
+    }
+
+    /// One-click smart auto-sort: scans all menu bar apps and groups them into clean top-level main folders by category.
+    func autoSortAppsIntoCategories() {
+        refreshItems(captureThumbnails: false)
+
+        // Collect all unique item keys currently tracked (respecting current visibility preferences)
+        var allKeys: [String] = []
+        var seen = Set<String>()
+        func collect(_ nodes: [FoldieNode]) {
+            for node in nodes {
+                switch node {
+                case .item(let key):
+                    if !seen.contains(key) && isItemVisibleInOrganizer(key: key) {
+                        seen.insert(key)
+                        allKeys.append(key)
+                    }
+                case .folder(let folder):
+                    collect(folder.children)
+                case .divider:
+                    break
+                }
+            }
+        }
+        collect(config.rootNodes)
+        for key in liveItemsByKey.keys where !seen.contains(key) && isItemVisibleInOrganizer(key: key) {
+            seen.insert(key)
+            allKeys.append(key)
+        }
+
+        struct CategorySpec {
+            let id: String
+            let name: String
+            let symbol: String
+            let hex: String
+        }
+
+        let categories: [CategorySpec] = [
+            CategorySpec(id: "ai_dev", name: "ИИ и разработка", symbol: "sparkles", hex: "#BF5AF2"),
+            CategorySpec(id: "vpn_net", name: "Сеть и VPN", symbol: "network", hex: "#FF375F"),
+            CategorySpec(id: "comm", name: "Связь", symbol: "message.fill", hex: "#30D158"),
+            CategorySpec(id: "prod", name: "Продуктивность", symbol: "briefcase.fill", hex: "#0A84FF"),
+            CategorySpec(id: "utils", name: "Утилиты", symbol: "wrench.and.screwdriver.fill", hex: "#FF9F0A"),
+            CategorySpec(id: "system", name: "Система", symbol: "cpu.fill", hex: "#8E8E93"),
+            CategorySpec(id: "other", name: "Прочее", symbol: "folder.fill", hex: "#40C8E0")
+        ]
+
+        var buckets: [String: [String]] = [:]
+        for key in allKeys {
+            let catID = classifyItemCategory(forKey: key)
+            buckets[catID, default: []].append(key)
+        }
+
+        var newRootNodes: [FoldieNode] = []
+        for spec in categories {
+            guard let keys = buckets[spec.id], !keys.isEmpty else { continue }
+            let sortedKeys = keys.sorted {
+                displayName(forItemKey: $0).localizedCaseInsensitiveCompare(displayName(forItemKey: $1)) == .orderedAscending
+            }
+            let folder = FoldieFolder(
+                name: spec.name,
+                symbolName: spec.symbol,
+                accentHex: spec.hex,
+                isExpanded: false,
+                children: sortedKeys.map { .item(key: $0) }
+            )
+            newRootNodes.append(.folder(folder))
+        }
+
+        config.rootNodes = newRootNodes
+        swipedFolderID = nil
+        cylinderFolderPath = []
+        saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
+    }
+
+    private func classifyItemCategory(forKey key: String) -> String {
+        let live = liveItemsByKey[key]
+        let meta = config.itemMetadata[key]
+        if live?.isSystemItem == true || key.hasPrefix("com.apple.") {
+            let lower = "\(key) \(displayName(forItemKey: key))".lowercased()
+            if lower.contains("vpn") || lower.contains("wifi") || lower.contains("wi-fi") {
+                return "vpn_net"
+            }
+            return "system"
+        }
+
+        let name = displayName(forItemKey: key).lowercased()
+        let bid = (live?.bundleIdentifier ?? meta?.bundleIdentifier ?? key).lowercased()
+        let combined = "\(name) \(bid)"
+
+        // 1. VPN & Networking
+        let vpnKeywords = ["vpn", "adguard", "amnezia", "wireguard", "tailscale", "warp", "cloudflare", "proton", "mullvad", "nord", "proxyman", "snitch", "network"]
+        if vpnKeywords.contains(where: { combined.contains($0) }) { return "vpn_net" }
+
+        // 2. AI, Dev & Design
+        let aiDevKeywords = ["chatgpt", "openai", "codex", "claude", "ollama", "cursor", "antigravity", "trae", "figma", "xcode", "vscode", "docker", "orbstack", "github", "gitlab", "iterm", "warp", "terminal", "jetbrains", "postman", "insomnia", "linear"]
+        if aiDevKeywords.contains(where: { combined.contains($0) }) { return "ai_dev" }
+
+        // 3. Communication
+        let commKeywords = ["telegram", "slack", "discord", "zoom", "whatsapp", "teams", "skype", "viber", "mail", "spark", "signal", "messenger", "meet"]
+        if commKeywords.contains(where: { combined.contains($0) }) { return "comm" }
+
+        // 4. Productivity & Browsers
+        let prodKeywords = ["notion", "calendar", "cron", "obsidian", "todoist", "things", "fantastical", "trello", "jira", "chrome", "safari", "arc", "firefox", "brave", "notes", "bear", "craft", "raycast", "alfred"]
+        if prodKeywords.contains(where: { combined.contains($0) }) { return "prod" }
+
+        // 5. Utilities, Input, Displays, Cloud sync
+        let utilKeywords = ["mos", "bettermouse", "logi", "displaylink", "dropzone", "hidden", "minimalbar", "bartender", "ice", "mole", "pearcleaner", "cleanmymac", "onedrive", "dropbox", "drive", "icloud", "rectangle", "magnet", "resurf", "type", "gigatype", "cap", "cleanshot", "notch", "caramba", "switcher", "bionic", "keyboard", "mouse", "sound", "monitor", "stats", "istat"]
+        if utilKeywords.contains(where: { combined.contains($0) }) { return "utils" }
+
+        // 6. Inspect Info.plist LSApplicationCategoryType if bundle exists on disk
+        if let appPath = meta?.bundlePath ?? bid.components(separatedBy: "::").last.flatMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)?.path }),
+           let plist = Bundle(path: appPath)?.infoDictionary,
+           let lsCat = (plist["LSApplicationCategoryType"] as? String)?.lowercased() {
+            if lsCat.contains("developer") || lsCat.contains("graphics") { return "ai_dev" }
+            if lsCat.contains("social") { return "comm" }
+            if lsCat.contains("productivity") || lsCat.contains("business") { return "prod" }
+            if lsCat.contains("utilities") { return "utils" }
+        }
+
+        return "other"
     }
 
     func updateStatusBarBadgeForCurrentFolder() {
@@ -396,6 +613,18 @@ final class FoldieStore: ObservableObject {
                 label: nil
             )
         }
+
+        // Keep dedicated menu bar icons synchronized for all folders with `showInMenuBar == true`
+        let folders = topLevelFolders()
+        var counts: [UUID: Int] = [:]
+        for f in folders {
+            counts[f.id] = countVisibleItems(in: f)
+        }
+        hider.syncPinnedFolderItems(
+            folders: folders,
+            counts: counts,
+            iconStyle: config.preferences.iconStyle
+        )
     }
 
     func setDisplayMode(_ mode: DisplayMode) {
@@ -480,10 +709,11 @@ final class FoldieStore: ObservableObject {
     func presentCreateFolder(parentFolderID: UUID? = nil) {
         folderEditorState = FolderEditorState(
             existingFolderID: nil,
-            parentFolderID: parentFolderID,
+            parentFolderID: nil,
             name: "",
             symbolName: "folder.fill",
-            accentHex: "#0A84FF"
+            accentHex: "#0A84FF",
+            showInMenuBar: false
         )
     }
 
@@ -493,7 +723,8 @@ final class FoldieStore: ObservableObject {
             parentFolderID: nil,
             name: folder.name,
             symbolName: folder.symbolName,
-            accentHex: folder.accentHex
+            accentHex: folder.accentHex,
+            showInMenuBar: folder.showInMenuBar
         )
     }
 
@@ -506,33 +737,37 @@ final class FoldieStore: ObservableObject {
                 id: existingID,
                 name: finalName,
                 symbolName: state.symbolName,
-                accentHex: state.accentHex
+                accentHex: state.accentHex,
+                showInMenuBar: state.showInMenuBar
             )
         } else {
+            // Always create new folders as top-level main folders for clean menu bar swiping & pinning
             let folder = FoldieFolder(
                 name: finalName,
                 symbolName: state.symbolName,
                 accentHex: state.accentHex,
-                isExpanded: true,
+                isExpanded: false,
+                showInMenuBar: state.showInMenuBar,
                 children: []
             )
-            if let parentID = state.parentFolderID {
-                _ = insertNode(.folder(folder), intoFolder: parentID, in: &config.rootNodes, atFront: true)
-            } else {
-                config.rootNodes.insert(.folder(folder), at: 0)
-            }
+            config.rootNodes.insert(.folder(folder), at: 0)
             saveConfig()
+            updateStatusBarBadgeForCurrentFolder()
         }
         folderEditorState = nil
     }
 
-    func updateFolder(id: UUID, name: String, symbolName: String, accentHex: String) {
+    func updateFolder(id: UUID, name: String, symbolName: String, accentHex: String, showInMenuBar: Bool? = nil) {
         _ = mutateFolder(id: id, in: &config.rootNodes) { folder in
             folder.name = name
             folder.symbolName = symbolName
             folder.accentHex = accentHex
+            if let showInMenuBar {
+                folder.showInMenuBar = showInMenuBar
+            }
         }
         saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
     }
 
     func toggleFolderExpanded(id: UUID) {
@@ -544,8 +779,11 @@ final class FoldieStore: ObservableObject {
 
     func deleteFolder(id: UUID) {
         cylinderFolderPath.removeAll { $0 == id }
+        if swipedFolderID == id { swipedFolderID = nil }
+        if activePopupFolderID == id { activePopupFolderID = nil }
         _ = deleteFolderUnwrappingChildren(id: id, in: &config.rootNodes)
         saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
     }
 
     func presentCreateDivider(parentFolderID: UUID? = nil) {
@@ -610,6 +848,7 @@ final class FoldieStore: ObservableObject {
             config.rootNodes.append(extracted)
         }
         saveConfig()
+        updateStatusBarBadgeForCurrentFolder()
     }
 
     func moveNode(nodeID: String, before targetNodeID: String) {
@@ -673,17 +912,19 @@ final class FoldieStore: ObservableObject {
         return count
     }
 
-    /// Nodes currently displayed in List mode (filtered to `swipedFolderID` if the user swiped to a specific folder).
+    /// Nodes currently displayed in List mode (filtered to the hovered pinned folder or swiped folder).
     var activeListNodes: [FoldieNode] {
-        if let activeID = swipedFolderID, let folder = folder(byID: activeID) {
+        let targetFolderID = activePopupFolderID ?? swipedFolderID
+        if let activeID = targetFolderID, let folder = folder(byID: activeID) {
             return folder.children
         }
         return config.rootNodes
     }
 
-    /// Nodes currently displayed in Cylinder mode according to `cylinderScope` and `cylinderFolderPath`.
+    /// Nodes currently displayed in Cylinder mode according to active pinned/swiped folder, `cylinderScope`, and `cylinderFolderPath`.
     var cylinderNodes: [FoldieNode] {
-        if let activeID = swipedFolderID, cylinderFolderPath.isEmpty, let folder = folder(byID: activeID) {
+        let targetFolderID = activePopupFolderID ?? swipedFolderID
+        if let activeID = targetFolderID, cylinderFolderPath.isEmpty, let folder = folder(byID: activeID) {
             return folder.children.filter { node in
                 switch node {
                 case .item(let key): return isItemVisibleInUI(key: key)

@@ -96,7 +96,7 @@ struct OrganizerWindowView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             HStack(spacing: 8) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -114,16 +114,18 @@ struct OrganizerWindowView: View {
                 .frame(width: 28, height: 28)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Настройки Foldie")
+                    Text("Foldie")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
-                    Text("Найдено иконок: \(store.visibleLiveItemCount)")
+                        .lineLimit(1)
+                    Text("Иконок: \(store.visibleLiveItemCount)")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
+            .fixedSize()
 
-            Spacer()
-
+            // Full-width single-line tab bar
             HStack(spacing: 3) {
                 ForEach(OrganizerTab.allCases) { tab in
                     let isSelected = selectedTab == tab
@@ -132,19 +134,23 @@ struct OrganizerWindowView: View {
                             selectedTab = tab
                         }
                     } label: {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 6) {
                             Image(systemName: tab.symbolName)
-                                .font(.system(size: 11, weight: .semibold))
-                            Text(tab.title)
                                 .font(.system(size: 11.5, weight: .semibold))
+                            Text(tab.title)
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                         .foregroundStyle(isSelected ? .primary : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected ? Color.primary.opacity(0.11) : Color.clear)
+                                .fill(isSelected ? Color.primary.opacity(0.12) : Color.clear)
                         )
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -154,17 +160,7 @@ struct OrganizerWindowView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.primary.opacity(0.05))
             )
-
-            Spacer()
-
-            Button {
-                onOpenMenuBarPopover()
-            } label: {
-                Label("Открыть меню", systemImage: "menubar.arrow.up.rectangle")
-                    .font(.system(size: 11.5, weight: .semibold))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -256,11 +252,24 @@ struct OrganizerWindowView: View {
                 }
 
                 HStack {
-                    Text("ВНУТРЕННИЕ ПАПКИ")
+                    Text("ОСНОВНЫЕ ПАПКИ")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .tracking(0.5)
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            store.autoSortAppsIntoCategories()
+                            sidebarFilter = .all
+                        }
+                    } label: {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Автосортировка: создать основные папки и разложить приложения по категориям")
+
                     Button {
                         store.presentCreateFolder(parentFolderID: nil)
                     } label: {
@@ -269,7 +278,7 @@ struct OrganizerWindowView: View {
                             .foregroundStyle(Color.accentColor)
                     }
                     .buttonStyle(.plain)
-                    .help("Создать папку")
+                    .help("Создать основную папку")
                 }
                 .padding(.horizontal, 8)
                 .padding(.top, 10)
@@ -277,12 +286,24 @@ struct OrganizerWindowView: View {
 
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        let folders = store.allFolders()
+                        let folders = store.topLevelFolders()
                         if folders.isEmpty {
-                            VStack(spacing: 6) {
+                            VStack(spacing: 7) {
                                 Text("Папок пока нет")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(.secondary)
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        store.autoSortAppsIntoCategories()
+                                        sidebarFilter = .all
+                                    }
+                                } label: {
+                                    Label("Автосортировка", systemImage: "wand.and.stars")
+                                        .font(.system(size: 11, weight: .semibold))
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+
                                 Button {
                                     store.presentCreateFolder(parentFolderID: nil)
                                 } label: {
@@ -293,7 +314,7 @@ struct OrganizerWindowView: View {
                                 .controlSize(.small)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
+                            .padding(.vertical, 16)
                         } else {
                             ForEach(folders) { folder in
                                 sidebarFolderRow(folder)
@@ -306,25 +327,53 @@ struct OrganizerWindowView: View {
 
                 Divider().opacity(0.4)
 
-                // Quick auto-collect button in sidebar footer
+                // Quick actions in sidebar footer (Auto-sort + Collect + Open Menu)
                 VStack(alignment: .leading, spacing: 6) {
                     Button {
-                        store.autoCollectAllIcons()
-                    } label: {
-                        HStack(spacing: 6) {
-                            if store.isAutoCollecting {
-                                ProgressView().controlSize(.mini)
-                            } else {
-                                Image(systemName: "tray.and.arrow.down.fill")
-                            }
-                            Text("Собрать в Foldie")
-                                .font(.system(size: 11.5, weight: .semibold))
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            store.autoSortAppsIntoCategories()
+                            sidebarFilter = .all
                         }
-                        .frame(maxWidth: .infinity)
+                    } label: {
+                        Label("Автосортировка", systemImage: "wand.and.stars")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(store.isAutoCollecting)
+                    .help("Автоматически разложить все приложения по основным папкам-категориям")
+
+                    HStack(spacing: 6) {
+                        Button {
+                            store.autoCollectAllIcons()
+                        } label: {
+                            HStack(spacing: 4) {
+                                if store.isAutoCollecting {
+                                    ProgressView().controlSize(.mini)
+                                } else {
+                                    Image(systemName: "tray.and.arrow.down.fill")
+                                }
+                                Text("Собрать")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(store.isAutoCollecting)
+
+                        Button {
+                            onOpenMenuBarPopover()
+                        } label: {
+                            Image(systemName: "menubar.arrow.up.rectangle")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .frame(width: 24)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Открыть меню Foldie")
+                    }
 
                     if let msg = store.autoCollectMessage {
                         Text(msg)
@@ -490,28 +539,73 @@ struct OrganizerWindowView: View {
         let filter = SidebarFilter.folder(folder.id)
         let isSelected = sidebarFilter == filter
         let isTargeted = targetedSidebarFilter == filter
+        let isActiveInMenuBar = store.swipedFolderID == folder.id
 
-        return HStack(spacing: 7) {
+        return HStack(spacing: 6) {
             Image(systemName: folder.symbolName)
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(folder.accentColor)
-                .frame(width: 18)
+                .frame(width: 17)
 
             Text(folder.name)
                 .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
                 .lineLimit(1)
 
-            Spacer()
+            Spacer(minLength: 2)
+
+            if isActiveInMenuBar {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+                    .help("Сейчас активна в строке меню")
+            }
+
+            HStack(spacing: 3) {
+                Button {
+                    store.toggleFolderPinnedInMenuBar(id: folder.id)
+                } label: {
+                    Image(systemName: folder.showInMenuBar ? "pin.fill" : "pin")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(folder.showInMenuBar ? folder.accentColor : .secondary.opacity(0.65))
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(.plain)
+                .help(folder.showInMenuBar
+                      ? "Убрать отдельную иконку этой папки из строки меню"
+                      : "Закрепить эту папку отдельной иконкой в строке меню")
+
+                Button {
+                    store.moveMainFolder(id: folder.id, up: true)
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 13, height: 14)
+                }
+                .buttonStyle(.plain)
+                .help("Выше в порядке свайпа")
+
+                Button {
+                    store.moveMainFolder(id: folder.id, up: false)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 13, height: 14)
+                }
+                .buttonStyle(.plain)
+                .help("Ниже в порядке свайпа")
+            }
 
             Text("\(store.countVisibleItems(in: folder))")
-                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 5)
                 .padding(.vertical, 1.5)
                 .background(Capsule().fill(Color.primary.opacity(0.07)))
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6.5)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
@@ -536,6 +630,23 @@ struct OrganizerWindowView: View {
             targetedSidebarFilter = targeted ? filter : nil
         }
         .contextMenu {
+            Button {
+                store.toggleFolderPinnedInMenuBar(id: folder.id)
+            } label: {
+                Label(
+                    folder.showInMenuBar ? "Убрать отдельную иконку из строки меню" : "Закрепить отдельной иконкой в строке меню",
+                    systemImage: folder.showInMenuBar ? "pin.slash" : "pin.fill"
+                )
+            }
+            Button {
+                store.selectSwipedFolder(isActiveInMenuBar ? nil : folder.id)
+            } label: {
+                Label(
+                    isActiveInMenuBar ? "Показать все папки в Foldie" : "Выбрать активной в Foldie (свайп)",
+                    systemImage: "menubar.rectangle"
+                )
+            }
+            Divider()
             Button {
                 store.presentEditFolder(folder)
             } label: {
@@ -1066,13 +1177,13 @@ private struct OrganizerItemRow: View {
                 Button {
                     store.activateItem(key: itemKey, rightClick: false)
                 } label: {
-                    Image(systemName: "arrow.up.forward.square")
+                    Image(systemName: liveItem != nil ? "cursorarrow.click" : "play.circle")
                         .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(liveItem != nil ? Color.accentColor : Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .disabled(liveItem == nil)
-                .help("Открыть иконку")
+                .disabled(liveItem == nil && store.resolveApplicationURL(forItemKey: itemKey) == nil)
+                .help(liveItem != nil ? "Открыть иконку в строке меню" : "Запустить приложение")
 
                 Toggle("", isOn: Binding(
                     get: { store.isItemEnabledInFoldie(key: itemKey) },
